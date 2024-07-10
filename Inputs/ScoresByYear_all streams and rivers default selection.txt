@@ -1,0 +1,8 @@
+Row Labels	Count of cat last 10 years
+excellent	190
+fair	274
+good	315
+poor	204
+very poor	188
+(blank)	
+Grand Total	1171
