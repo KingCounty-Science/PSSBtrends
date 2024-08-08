@@ -75,42 +75,35 @@ names(lookup)
 OTU_collapsed<-merge(OTU_collapsed, unique(lookup[,c(2, 11:27)]), by.x="OTU", by.y="Taxon_orig", all.x=T)##need to update this to pull from BCG attributes table
 
 ###################################### Roll-up by broad rules ##########
+
 KC_taxa_coarse<-OTU_collapsed
 
 KC_taxa_coarse$OTU_COARSE<-""
 names(KC_taxa_coarse)
 
-KC_taxa_coarse[which(KC_taxa_coarse$SubClass=="Oligochaeta"),]$OTU_COARSE<-"Oligochaeta"
-KC_taxa_coarse[which(KC_taxa_coarse$SubClass=="Oligochaeta"),][21:33]<-"" 
+coarse_rules<-data.frame(taxa=c("Oligochaeta", "Acari", "Gastropoda","Dytiscidae", "Simuliidae", "Chironomidae", "Trichoptera"), ranktouse=c("SubClass", "SubClass", "Family", "Family", "Family", "Family", "Genus"), rank=c("SubClass", "SubClass", "Class", "Family", "Family", "Family", "Order"))
 
-KC_taxa_coarse[which(KC_taxa_coarse$SubClass=="Acari"),]$OTU_COARSE<-"Acari"
-KC_taxa_coarse[which(KC_taxa_coarse$SubClass=="Acari"),][21:33]<-""
-
-KC_taxa_coarse[which(KC_taxa_coarse$Class=="Gastropoda"),][25:33]<-""
-KC_taxa_coarse[which(KC_taxa_coarse$Class=="Gastropoda"&KC_taxa_coarse$OTU=="Gastropoda"),]$OTU_COARSE<-"Gastropoda"
-KC_taxa_coarse[which(KC_taxa_coarse$Class=="Gastropoda"&!is.na(KC_taxa_coarse$Family)&KC_taxa_coarse$OTU_COARSE==""),]$OTU_COARSE<-paste0(KC_taxa_coarse[which(KC_taxa_coarse$Class=="Gastropoda"&!is.na(KC_taxa_coarse$Family)&KC_taxa_coarse$OTU_COARSE==""),]$Family)
-KC_taxa_coarse[which(KC_taxa_coarse$Class=="Gastropoda"&is.na(KC_taxa_coarse$Family)&!is.na(KC_taxa_coarse$SuperFamily)&KC_taxa_coarse$OTU_COARSE==""),]$OTU_COARSE<-paste0(KC_taxa_coarse[which(KC_taxa_coarse$Class=="Gastropoda"&is.na(KC_taxa_coarse$Family)&!is.na(KC_taxa_coarse$SuperFamily)&KC_taxa_coarse$OTU_COARSE==""),]$SuperFamily)
-KC_taxa_coarse[which(KC_taxa_coarse$Class=="Gastropoda"&KC_taxa_coarse$OTU_COARSE==""),]##make sure there are no unassigned taxa
-
-KC_taxa_coarse[which(KC_taxa_coarse$Family=="Dytiscidae"),]$OTU_COARSE<-"Dytiscidae"
-KC_taxa_coarse[which(KC_taxa_coarse$Family=="Dytiscidae"),][25:33]<-""
-
-KC_taxa_coarse[which(KC_taxa_coarse$Family=="Simuliidae"),]$OTU_COARSE<-"Simuliidae"
-KC_taxa_coarse[which(KC_taxa_coarse$Family=="Simuliidae"),][25:33]<-""
-
-KC_taxa_coarse[which(KC_taxa_coarse$Family=="Chironomidae"),]$OTU_COARSE<-"Chironomidae"
-KC_taxa_coarse[which(KC_taxa_coarse$Family=="Chironomidae"),][25:33]<-""
-
-KC_taxa_coarse[which(KC_taxa_coarse$Order=="Trichoptera"&KC_taxa_coarse$OTU=="Trichoptera"),]$OTU_COARSE<-"Trichoptera"
-KC_taxa_coarse[which(KC_taxa_coarse$Order=="Trichoptera" & !is.na(KC_taxa_coarse$Genus)&KC_taxa_coarse$OTU_COARSE=="") ,]$OTU_COARSE<-  paste0(KC_taxa_coarse[which(KC_taxa_coarse$Order=="Trichoptera" & !is.na(KC_taxa_coarse$Genus)&KC_taxa_coarse$OTU_COARSE==""),]$Genus )
-KC_taxa_coarse[which(KC_taxa_coarse$Order=="Trichoptera" & is.na(KC_taxa_coarse$Genus)&!is.na(KC_taxa_coarse$Family)&KC_taxa_coarse$OTU_COARSE==""),]$OTU_COARSE<-  paste0(KC_taxa_coarse[which(KC_taxa_coarse$Order=="Trichoptera" & is.na(KC_taxa_coarse$Genus)&!is.na(KC_taxa_coarse$Family)&KC_taxa_coarse$OTU_COARSE==""),]$Family )
-KC_taxa_coarse[which(KC_taxa_coarse$Order=="Trichoptera"),][29:33]<-""
-KC_taxa_coarse[which(KC_taxa_coarse$Order=="Trichoptera"&KC_taxa_coarse$OTU_COARSE==""),]##make sure there are no unassigned taxa
-KC_taxa_coarse[which(KC_taxa_coarse$Order=="Trichoptera"&KC_taxa_coarse$OTU_COARSE==""&KC_taxa_coarse$OTU=="Integripalpia"),"OTU_COARSE"]<-"Integripalpia"
-KC_taxa_coarse[which(KC_taxa_coarse$Order=="Trichoptera"&KC_taxa_coarse$OTU_COARSE==""&KC_taxa_coarse$OTU=="Limnephiloidea"),"OTU_COARSE"]<-"Limnephiloidea"
-
-KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==""),]
-KC_taxa_coarse[KC_taxa_coarse$OTU_COARSE=="",]$OTU_COARSE<-  paste0(KC_taxa_coarse[KC_taxa_coarse$OTU_COARSE=="",]$OTU)
+for (j in 1:nrow(coarse_rules)){
+  
+  STE_rank<-coarse_rules[j, "ranktouse"]
+  rank<-coarse_rules[j, "rank"]
+  taxa<-coarse_rules[j, "taxa"]
+  index<-which(names(KC_taxa_coarse)== STE_rank)
+  rankindex<-which(names(KC_taxa_coarse)== rank)
+  halt1<-which(names(KC_taxa_coarse)== "Phylum")
+  halt2<-which(names(KC_taxa_coarse)== "Species")
+  
+  for (i in halt2:halt1){
+    if(i > index) {
+      KC_taxa_coarse[which(KC_taxa_coarse[,rankindex]==taxa),i]<-""
+    } else if (i<= index) {
+      
+      KC_taxa_coarse[which(KC_taxa_coarse[,rankindex]==taxa&KC_taxa_coarse$OTU_COARSE==""),"OTU_COARSE"]<-KC_taxa_coarse[which(KC_taxa_coarse[,rankindex]==taxa&KC_taxa_coarse$OTU_COARSE==""),i]
+    }
+    
+  }
+}
+KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==""),"OTU_COARSE"]<-KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==""),"OTU"]
 
 KC_taxa_coarse[is.na(KC_taxa_coarse)]<-""
 
