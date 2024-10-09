@@ -7,6 +7,9 @@ library(tidyverse)
 library(dplyr)
 getwd()
 
+atts<-read.xlsx("G:/GreenWQA/Biota/Contracts/Bellevue/2023 Report/for trends analysis/2012_taxa_attributes.xlsx")
+lookup<-read.csv("./Inputs/ORWA_TaxaTranslator_20240417.csv")##update this to latest translator table.
+BCG_atts<-read.csv("./Inputs/ORWA_Attributes_20240417.csv")#load the BCG taxonomic hierarchy
 
 ##This function takes the raw taxa data .txt output from PSSB and binds it all into one data object
 taxaBind <- function(file.path) {
@@ -31,25 +34,26 @@ length(unique(raw$Stream.or.River))
 length(unique(raw$Subbasin))
 
 ###Kate has identified what sites she wants to run trends on. This subsets the taxa data to just those sites
-site<-read.xlsx("./Inputs/ScoresByYear_all streams and rivers default selection.xlsx", detectDates = T, sheet="NEW - sites for trends")
-raw2<-subset(raw, Site.Code %in% site$Site.Code)
-
-
-# lookup<-openxlsx::read.xlsx("BCG translation table as of 2023_03_15.xlsx", detectDates = T)
-lookup<-read.csv("./Inputs/ORWA_TaxaTranslator_20240204.csv")##update this to latest translator table.
+# site<-read.xlsx("./Inputs/ScoresByYear_all streams and rivers default selection.xlsx", detectDates = T, sheet="NEW - sites for trends")
+# raw2<-subset(raw, Site.Code %in% site$Site.Code)
 
 ####Fix some names to match the translator better
-# lookup[lookup$Taxon_orig=="Rhyacophila Brunnea/Vemna Gr.","Taxon_orig"]<-"Rhyacophila Brunnea/Vemna Group"
-# lookup[lookup$Taxon_orig=="Lepidostoma unicolor group","Taxon_orig"]<-"Lepidostoma Unicolor Group"
-raw2[raw2$Taxon=="Lepidotoma-panel case larvae","Taxon"]<-"Lepidostoma-panel case larvae"
-raw2[raw2$Taxon=="Constempellina brevicosta","Taxon"]<-"Constempellina"
+raw[raw$Taxon=="Lepidotoma-panel case larvae","Taxon"]<-"Lepidostoma-panel case larvae" ###fix this in PSSB
 
+PSSB_taxa<-unique(raw[,c(28, 29, 48:69)])
+##there are some repeat entries that somewhere in the hierarchy have an NA instead of "". This yields multiples of the same taxa. Fix this.
+PSSB_taxa[is.na(PSSB_taxa)]<-""
+PSSB_taxa<-unique(PSSB_taxa) #we're generating a list of all taxa in PSSB samples
+any(duplicated(PSSB_taxa$Taxon.Serial.Number))
+any(duplicated(PSSB_taxa$Taxon))
+PSSB_taxa[which(duplicated(PSSB_taxa$Taxon)),] ### two entries in PSSB-- fix this in PSSB
+PSSB_taxa<-subset(PSSB_taxa, Taxon.Serial.Number !="-40")
 
 ####merge the translator lookup with the raw data, rename OTU_MetricCalc, and look for any taxa missing a translation
-OTU<-merge(raw2, subset(lookup, select=c(Taxon_orig, OTU_MetricCalc, NonTarget)), by.x="Taxon", by.y="Taxon_orig", all.x=T)
+OTU<-merge(raw, subset(lookup, select=c(Taxon, OTU_MetricCalc, NonTarget)), by.x="Taxon", by.y="Taxon", all.x=T)
 OTU[which(is.na(OTU$OTU_MetricCalc)),]
 colnames(OTU)[ncol(OTU)-1]<-"OTU"
-missing<-unique(OTU[which(is.na(OTU$OTU)), "Taxon"])
+missing<-unique(OTU[which(is.na(OTU$OTU)), "Taxon"])## screening step to see if any taxa aren't mapped
 
 ###prepare the data
 OTU$Visit.Date<-format(as.Date(OTU$Visit.Date, "%m/%d/%Y"))
@@ -57,23 +61,57 @@ OTU$Year<-year(OTU$Visit.Date)
 
 OTU<-subset(OTU, is.na(QC.Replicate.Of.Sample.Code)|QC.Replicate.Of.Sample.Code=="")##remove QC replicates
 OTU<-subset(OTU, Non.B.IBI=="False")##remove non-target organisms
-DNI<-OTU[which(OTU$OTU=="DNI"),"Taxon"]###These are marked as "DNI" in BCG translation table, but they aren't on B-IBI exclusion list. Adding back in for now.
 OTU[which(OTU$OTU=="DNI"),"OTU"]<-OTU[which(OTU$OTU=="DNI"),"Taxon"]###These are marked as "DNI" in BCG translation table, but they aren't on B-IBI exclusion list. Adding back in for now.
 
 OTU$Unique<-as.logical(OTU$Unique)
 
 ##collapse to Visit.ID, because 1998-2015 samples were often three reps of 3 sq ft with different sample names for each rep
-test<-subset(ddply(OTU, .(Visit.ID, WRIA.Number, Agency, Basin, Subbasin, Stream.or.River, Project, Visit.Date, Year, Latitude, Longitude, Lab.Name, Site.Code), summarize, Samples = length(unique(Sample.Code))), Samples>1)
-
-
 OTU_collapsed<-ddply(OTU, .(Visit.ID, OTU, WRIA.Number, Agency, Basin, Subbasin, Stream.or.River, Project, Visit.Date, Year, Latitude, Longitude, Lab.Name, Site.Code), summarize, Quantity_OTU = sum(Quantity), Unique_OTU=any(Unique))
 
 OTU_collapsed$Visit.Date<-as.Date(OTU_collapsed$Visit.Date, "%Y-%m-%d")
 
-names(lookup)
-##Append correct hierarchy by matching OTU to Taxon in the BCG lookup table. 
-OTU_collapsed<-merge(OTU_collapsed, unique(lookup[,c(2, 11:27)]), by.x="OTU", by.y="Taxon_orig", all.x=T)##need to update this to pull from BCG attributes table
+########create lookup table for taxa hierarchy. ####
+#we need to  get the BCG hierarchy and the PSSB taxa hierarchy in the same format and combine them
 
+names(BCG_atts)
+names(BCG_atts[,c(1, 22,24:40)])
+hierarchy<-BCG_atts[,c(1, 22,24:40)]
+names(PSSB_taxa)
+names(hierarchy)
+##the BCG hierarchy isn't the same as PSSB. Need to consolidate some levels into Species Group, then rename columns
+hierarchy[which(hierarchy$SpeciesComplex!=""&hierarchy$SpeciesGroup==""),"SpeciesGroup"]<-hierarchy[which(hierarchy$SpeciesComplex!=""&hierarchy$SpeciesGroup==""),"SpeciesComplex"]
+hierarchy[which(hierarchy$SpeciesSubGroup!=""&hierarchy$SpeciesGroup==""),"SpeciesGroup"]<-hierarchy[which(hierarchy$SpeciesSubGroup!=""&hierarchy$SpeciesGroup==""),"SpeciesSubGroup"]
+hierarchy$Superclass<-NA
+hierarchy$Infraclass<-NA
+hierarchy$Superorder<-NA
+hierarchy$Infraorder<-NA
+hierarchy$Custom.Subfamily<-NA
+hierarchy$Subtribe<-NA
+hierarchy$Subspecies<-NA
+
+##need to get the hierarchy in the right order
+names(PSSB_taxa)
+names(hierarchy)
+names(hierarchy[,c(2,1, 3, 4, 20, 5:6,21,22,  7:8, 23,9:10, 11,24, 12,13,25,14,16, 15,19, 26)])
+hierarchy<-hierarchy[,c(2,1, 3, 4, 20, 5:6,21,22,  7:8, 23,9:10, 11,24, 12,13,25,14,16, 15,19, 26)]
+
+names(hierarchy)<-names(PSSB_taxa)
+hierarchy[is.na(hierarchy)]<-""
+PSSB_taxa$Taxon.Serial.Number<-as.character(PSSB_taxa$Taxon.Serial.Number)
+
+append<-setdiff(hierarchy$Taxon, PSSB_taxa$Taxon)### look for taxa that are in the BCG hierarchy that aren't in the PSSB hierarchy
+append<-hierarchy[hierarchy$Taxon %in% append,] ###restrict the BCG hierarchy to just those not in the PSSB hierarchy
+any(duplicated(PSSB_taxa$Taxon))
+PSSB_taxa[which(duplicated(PSSB_taxa$Taxon)),] 
+
+hier_combined<-rbind(PSSB_taxa, append) ###combine
+any(duplicated(hier_combined$Taxon))
+
+# ##Append correct hierarchy to taxa
+OTU_collapsed<-merge(OTU_collapsed, hier_combined, by.x="OTU", by.y="Taxon", all.x=T)
+any(is.na(OTU_collapsed$Phylum))
+OTU_collapsed[which(is.na(OTU_collapsed$Phylum)),]
+any(OTU_collapsed$Phylum=="")
 ###################################### Roll-up by broad rules ##########
 
 KC_taxa_coarse<-OTU_collapsed
@@ -81,7 +119,7 @@ KC_taxa_coarse<-OTU_collapsed
 KC_taxa_coarse$OTU_COARSE<-""
 names(KC_taxa_coarse)
 
-coarse_rules<-data.frame(taxa=c("Oligochaeta", "Acari", "Gastropoda","Dytiscidae", "Simuliidae", "Chironomidae", "Trichoptera"), ranktouse=c("SubClass", "SubClass", "Family", "Family", "Family", "Family", "Genus"), rank=c("SubClass", "SubClass", "Class", "Family", "Family", "Family", "Order"))
+coarse_rules<-data.frame(taxa=c("Oligochaeta", "Acari", "Gastropoda","Dytiscidae", "Simuliidae", "Chironomidae", "Trichoptera"), ranktouse=c("Subclass", "Subclass", "Family", "Family", "Family", "Family", "Genus"), rank=c("Subclass", "Subclass", "Class", "Family", "Family", "Family", "Order"))
 
 for (j in 1:nrow(coarse_rules)){
   
@@ -107,44 +145,28 @@ KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==""),"OTU_COARSE"]<-KC_taxa_coars
 
 KC_taxa_coarse[is.na(KC_taxa_coarse)]<-""
 
+################read in PSSB attribute table, do rolling lookup between coarse taxa hierarchy and attribute table ############
 
-##Add attributes from unprocessed data table where OTU_COARSE matches Taxon. Where there isn't a match, we have to lookup attributes from PSSB table.
-names(OTU)
-hier<-unique(OTU[, c(1, 24, 39:43)])
-hier2<-unique(OTU[, c(1, 39:43)])
-dups<-hier2[duplicated(hier2$Taxon),]##some taxa have multiple attributes, depending on the STE level used. 
-hier<-subset(hier, Taxon %in% dups$Taxon & Taxa.Effort=="Fine") #select only the fine STE attributes of the dups 
-nodups<-subset(hier2, !Taxon %in% dups$Taxon) #exclude any taxa that have duplicate attributes
-hier<-hier[,-c(2)]
-hier<-rbind(hier, nodups) ##bind the non-duplicated attributes, and the attributes of only the fine STE entries for duplicated taxa
-missing<-unique(KC_taxa_coarse$OTU_COARSE)[which(!unique(KC_taxa_coarse$OTU_COARSE) %in% hier$Taxon)] ##identify taxa missing attributes. These taxa were re-named by the BCG standardization.
-
-##read in PSSB attribute table, look for matches between OTU_COARSE and Taxon.Name 
-atts<-read.xlsx("G:/GreenWQA/Biota/Contracts/Bellevue/2023 Report/for trends analysis/2012_taxa_attributes.xlsx")
-hier2<-subset(atts, `Taxon.Name` %in% missing, select=c(Taxon.Name, `2012.Clinger`, `2012.Intolerant`, `2012.Long.Lived`, `2012.Predator`, `2012.Tolerant`))
-names(hier2)<-str_replace(names(hier2), "2012.", "")
-names(hier2)[1]<-"Taxon"
-hier<-rbind(hier, hier2)
-missing<-unique(KC_taxa_coarse$OTU_COARSE)[!unique(KC_taxa_coarse$OTU_COARSE) %in% hier$Taxon]
-
-##Still missing some attributes. Need to do a rolling lookup to see where the next match is as we move up the hierarchy of the missing taxa.
 names(KC_taxa_coarse)
-missing_hierarchy<-unique(subset(KC_taxa_coarse, OTU_COARSE %in% missing, select=c(17:34)))
+missing_atts<-unique(subset(KC_taxa_coarse, select=c(18:40)))
 attribs2<-data.frame(Taxon.Name=character(), Predator=character(), Long.Lived=character(), Tolerant=character(), Intolerant=character(), Clinger=character(), OTU_COARSE=character(),  iter=numeric())
 
-for (i in 1:ncol(missing_hierarchy)){
-  k<-(ncol(missing_hierarchy)+1)-i
-  attribs<-merge(subset(atts, select=c("Taxon.Name", "2012.Clinger", "2012.Intolerant", "2012.Long.Lived", "2012.Predator", "2012.Tolerant")), missing_hierarchy[, c(k, 18)], by.x="Taxon.Name", by.y=names(missing_hierarchy[k]))
+for (i in 1:ncol(missing_atts)){
+  k<-(ncol(missing_atts)+1)-i
+  attribs<-merge(subset(atts, select=c("Taxon.Name", "2012.Clinger", "2012.Intolerant", "2012.Long.Lived", "2012.Predator", "2012.Tolerant")), missing_atts[, c(k, 23)], by.x="Taxon.Name", by.y=names(missing_atts[k]))
   names(attribs)<-str_replace(names(attribs), "2012.", "")
-  # if(nrow(attribs>0))  attribs$iter<-i
+  names(attribs)<-str_replace(names(attribs), ".1", "")
   attribs2<-rbind(attribs, attribs2)
-  missing_hierarchy<-subset(missing_hierarchy, !OTU_COARSE %in% attribs2$OTU_COARSE)
+  names(attribs2)<-str_replace(names(attribs2), ".1", "")
+  missing_atts<-subset(missing_atts, !OTU_COARSE %in% attribs2$OTU_COARSE)
 }
 
 attribs2<-attribs2[, -1]
 names(attribs2)[6]<-"Taxon"
-hier<-rbind(hier, attribs2)
-missing<-unique(KC_taxa_coarse$OTU_COARSE)[!unique(KC_taxa_coarse$OTU_COARSE) %in% hier$Taxon]
+atts<-unique(attribs2)
+any(duplicated(atts$Taxon))
+atts[(which(duplicated(atts$Taxon))),]
+missing<-unique(KC_taxa_coarse$OTU_COARSE)[!unique(KC_taxa_coarse$OTU_COARSE) %in% atts$Taxon] ##These taxa do not have a match in the PSSB attribute table
 
 library(plyr)
 OTU_collapsed2<-ddply(KC_taxa_coarse, .(Visit.ID, OTU_COARSE,Agency, WRIA.Number, Basin, 
@@ -155,15 +177,52 @@ OTU_collapsed2<-ddply(KC_taxa_coarse, .(Visit.ID, OTU_COARSE,Agency, WRIA.Number
 ##append attributes from the lookup table we made
 OTU_collapsed3<-left_join(OTU_collapsed2, hier, by=c("OTU_COARSE"="Taxon"))
 any(is.na(OTU_collapsed3$Clinger))
+##Fill in attributes as "FALSE" for the taxa with no attribute matches
+OTU_collapsed3[which(is.na(OTU_collapsed3$Clinger)),"Clinger"]<-FALSE
+OTU_collapsed3[which(is.na(OTU_collapsed3$Intolerant)),"Intolerant"]<-FALSE
+OTU_collapsed3[which(is.na(OTU_collapsed3$Long.Lived)),"Long.Lived"]<-FALSE
+OTU_collapsed3[which(is.na(OTU_collapsed3$Predator)),"Predator"]<-FALSE
+OTU_collapsed3[which(is.na(OTU_collapsed3$Tolerant)),"Tolerant"]<-FALSE
 
-##append on hierarchy from BCG lookup table
-OTU_collapsed3<-merge(OTU_collapsed3, unique(lookup[,c(2, 11:27)]), by.x="OTU_COARSE", by.y="Taxon_orig", all.x=T)
+##append on hierarchy
+###some taxa have multiple unique hierarchies because different entries got rolled up to the same level, and taxonomists have been uneven in entering in 'infraorder', 'suborder' and 'infraclass'. Need to run some loops to clean this up by selecting the most complete hierarchy available
+new_hierarchy<-unique(KC_taxa_coarse[,c(18:40)])
+countlength<-ddply(new_hierarchy, .(OTU_COARSE), summarize, count=length(OTU_COARSE))
+fixthese<-countlength[countlength$count>1,]
+check<-new_hierarchy[new_hierarchy$OTU_COARSE %in% fixthese$OTU_COARSE,]
+for (u in 1:nrow(check)){
+  check$sum[u]<-sum(check[u,]!="")
+}
+for (j in unique(check$OTU_COARSE)) {
+  
+  test<-check[check$OTU_COARSE==j,]
+    summ<-colSums(test == "")
+    ilen<-max(summ)
+    fixlevels<-summ[which(summ<ilen& summ>0)]
+    
+     for (z in names(fixlevels)){
+       update<-test[which(test[,z]!=""), z]
+       if (length(update)>1) print("Error in taxonomy agreement")
+       check[check$OTU_COARSE==j,z]<-update
+     }
+}
+check<-unique(check)
+check<-check[,-which(names(check) %in% "sum")]
 
+new_hierarchy<-subset(new_hierarchy, ! OTU_COARSE %in% check$OTU_COARSE)
+new_hierarchy<-rbind(new_hierarchy, check)
+countlength<-ddply(new_hierarchy, .(OTU_COARSE), summarize, count=length(OTU_COARSE))
+fixthese<-countlength[countlength$count>1,]
 
+OTU_collapsed3<-merge(OTU_collapsed3, new_hierarchy, by.x="OTU_COARSE", by.y="OTU_COARSE", all.x=T)
+any(is.na(OTU_collapsed3$Phylum))
+unique(OTU_collapsed3[which(is.na(OTU_collapsed3$Phylum)),]$OTU_COARSE)
+any(OTU_collapsed3$Phylum=="")
 
 write.csv(OTU_collapsed3, "Collapsed_Coarse_Taxa.csv")
 OTU_collapsed3<-read.csv( "Collapsed_Coarse_Taxa.csv")
 
+##The rarify function below is similar to how subsampling was done for the trends report.
 rarify<- function (inbug, sample.ID, abund, subsize, taxa, mySeed = NA)
 { #set.seed(mySeed)
   KC_rarified<-inbug[0,]
