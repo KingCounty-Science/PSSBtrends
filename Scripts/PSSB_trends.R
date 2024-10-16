@@ -145,10 +145,52 @@ KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==""),"OTU_COARSE"]<-KC_taxa_coars
 
 KC_taxa_coarse[is.na(KC_taxa_coarse)]<-""
 
+library(plyr)
+OTU_collapsed2<-ddply(KC_taxa_coarse, .(Visit.ID, OTU_COARSE,Agency, WRIA.Number, Basin, 
+                                        Subbasin, Stream.or.River, Project, Visit.Date, 
+                                        Year, Latitude, Longitude, Lab.Name, Site.Code
+), summarize, Quantity_OTU = sum(Quantity_OTU), Unique_OTU=any(Unique_OTU))
+
+##append on correct hierarchy
+###some taxa have multiple unique hierarchies because different entries got rolled up to the same level, and taxonomists have been uneven in entering in 'infraorder', 'suborder' and 'infraclass'. Need to run some loops to clean this up by selecting the most complete hierarchy available
+new_hierarchy<-unique(KC_taxa_coarse[,c(18:40)])
+countlength<-ddply(new_hierarchy, .(OTU_COARSE), summarize, count=length(OTU_COARSE))
+fixthese<-countlength[countlength$count>1,]
+check<-new_hierarchy[new_hierarchy$OTU_COARSE %in% fixthese$OTU_COARSE,]
+for (u in 1:nrow(check)){
+  check$sum[u]<-sum(check[u,]!="")
+}
+for (j in unique(check$OTU_COARSE)) {
+  
+  test<-check[check$OTU_COARSE==j,]
+  summ<-colSums(test == "")
+  ilen<-max(summ)
+  fixlevels<-summ[which(summ<ilen& summ>0)]
+  
+  for (z in names(fixlevels)){
+    update<-test[which(test[,z]!=""), z]
+    if (length(update)>1) print("Error in taxonomy agreement")
+    check[check$OTU_COARSE==j,z]<-update
+  }
+}
+
+check<-check[,-which(names(check) %in% "sum")]
+check<-unique(check)
+
+new_hierarchy<-subset(new_hierarchy, ! OTU_COARSE %in% check$OTU_COARSE)
+new_hierarchy<-rbind(new_hierarchy, check)
+countlength<-ddply(new_hierarchy, .(OTU_COARSE), summarize, count=length(OTU_COARSE))
+fixthese<-countlength[countlength$count>1,]
+
+OTU_collapsed3<-merge(OTU_collapsed2, new_hierarchy, by.x="OTU_COARSE", by.y="OTU_COARSE", all.x=T)
+any(is.na(OTU_collapsed3$Phylum))
+unique(OTU_collapsed3[which(is.na(OTU_collapsed3$Phylum)),]$OTU_COARSE)
+any(OTU_collapsed3$Phylum=="")
+
 ################read in PSSB attribute table, do rolling lookup between coarse taxa hierarchy and attribute table ############
 
-names(KC_taxa_coarse)
-missing_atts<-unique(subset(KC_taxa_coarse, select=c(18:40)))
+names(OTU_collapsed3)
+missing_atts<-unique(subset(OTU_collapsed3, select=c(17:38,1)))
 attribs2<-data.frame(Taxon.Name=character(), Predator=character(), Long.Lived=character(), Tolerant=character(), Intolerant=character(), Clinger=character(), OTU_COARSE=character(),  iter=numeric())
 
 for (i in 1:ncol(missing_atts)){
@@ -163,19 +205,15 @@ for (i in 1:ncol(missing_atts)){
 
 attribs2<-attribs2[, -1]
 names(attribs2)[6]<-"Taxon"
-atts<-unique(attribs2)
-any(duplicated(atts$Taxon))
-atts[(which(duplicated(atts$Taxon))),]
-missing<-unique(KC_taxa_coarse$OTU_COARSE)[!unique(KC_taxa_coarse$OTU_COARSE) %in% atts$Taxon] ##These taxa do not have a match in the PSSB attribute table
+attribs<-unique(attribs2)
+any(duplicated(attribs$Taxon))
+attribs[(which(duplicated(attribs$Taxon))),]
+missing<-unique(KC_taxa_coarse$OTU_COARSE)[!unique(KC_taxa_coarse$OTU_COARSE) %in% attribs$Taxon] ##These taxa do not have a match in the PSSB attribute table
 
-library(plyr)
-OTU_collapsed2<-ddply(KC_taxa_coarse, .(Visit.ID, OTU_COARSE,Agency, WRIA.Number, Basin, 
-                                        Subbasin, Stream.or.River, Project, Visit.Date, 
-                                        Year, Latitude, Longitude, Lab.Name, Site.Code
-), summarize, Quantity_OTU = sum(Quantity_OTU), Unique_OTU=any(Unique_OTU))
+
 
 ##append attributes from the lookup table we made
-OTU_collapsed3<-left_join(OTU_collapsed2, hier, by=c("OTU_COARSE"="Taxon"))
+OTU_collapsed3<-left_join(OTU_collapsed3, attribs, by=c("OTU_COARSE"="Taxon"))
 any(is.na(OTU_collapsed3$Clinger))
 ##Fill in attributes as "FALSE" for the taxa with no attribute matches
 OTU_collapsed3[which(is.na(OTU_collapsed3$Clinger)),"Clinger"]<-FALSE
@@ -184,40 +222,7 @@ OTU_collapsed3[which(is.na(OTU_collapsed3$Long.Lived)),"Long.Lived"]<-FALSE
 OTU_collapsed3[which(is.na(OTU_collapsed3$Predator)),"Predator"]<-FALSE
 OTU_collapsed3[which(is.na(OTU_collapsed3$Tolerant)),"Tolerant"]<-FALSE
 
-##append on hierarchy
-###some taxa have multiple unique hierarchies because different entries got rolled up to the same level, and taxonomists have been uneven in entering in 'infraorder', 'suborder' and 'infraclass'. Need to run some loops to clean this up by selecting the most complete hierarchy available
-new_hierarchy<-unique(KC_taxa_coarse[,c(18:40)])
-countlength<-ddply(new_hierarchy, .(OTU_COARSE), summarize, count=length(OTU_COARSE))
-fixthese<-countlength[countlength$count>1,]
-check<-new_hierarchy[new_hierarchy$OTU_COARSE %in% fixthese$OTU_COARSE,]
-for (u in 1:nrow(check)){
-  check$sum[u]<-sum(check[u,]!="")
-}
-for (j in unique(check$OTU_COARSE)) {
-  
-  test<-check[check$OTU_COARSE==j,]
-    summ<-colSums(test == "")
-    ilen<-max(summ)
-    fixlevels<-summ[which(summ<ilen& summ>0)]
-    
-     for (z in names(fixlevels)){
-       update<-test[which(test[,z]!=""), z]
-       if (length(update)>1) print("Error in taxonomy agreement")
-       check[check$OTU_COARSE==j,z]<-update
-     }
-}
-check<-unique(check)
-check<-check[,-which(names(check) %in% "sum")]
 
-new_hierarchy<-subset(new_hierarchy, ! OTU_COARSE %in% check$OTU_COARSE)
-new_hierarchy<-rbind(new_hierarchy, check)
-countlength<-ddply(new_hierarchy, .(OTU_COARSE), summarize, count=length(OTU_COARSE))
-fixthese<-countlength[countlength$count>1,]
-
-OTU_collapsed3<-merge(OTU_collapsed3, new_hierarchy, by.x="OTU_COARSE", by.y="OTU_COARSE", all.x=T)
-any(is.na(OTU_collapsed3$Phylum))
-unique(OTU_collapsed3[which(is.na(OTU_collapsed3$Phylum)),]$OTU_COARSE)
-any(OTU_collapsed3$Phylum=="")
 
 write.csv(OTU_collapsed3, "Collapsed_Coarse_Taxa.csv")
 OTU_collapsed3<-read.csv( "Collapsed_Coarse_Taxa.csv")
