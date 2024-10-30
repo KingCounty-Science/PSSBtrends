@@ -1,4 +1,18 @@
+### This code was originally written by Beth Sosik in 2023 as part of the Puget sound Partnership update,
+## and subsequently updated and modified through 2024 to be more flexible and accurate.
+##The code takes raw taxa data from PSSB in the form of text files, maps taxa based on the BCG workgroup taxa translator,
+## rolls the taxa up to the Coarse STE (though the code can easily be modified to Fine STE),
+##adds attributes using a rolling lookup, excludes taxa based on a rolling lookup,
+##and runs a subsampling routine on the taxa. The subsampling routine is NOT the same as is currently used by PSSB.
+##The PSSB subsampling routine is semi-nonrandom to favor inclusion of unique taxa.
+##The subsampling routine used here is fully random.
 
+
+##The code then goes on to score the samples using the Coarse STE-based calculations (though this is also easily adjusted to Fine).
+
+##Finally, the code runs through trends analysis at multiple spatial scales: REgional, subbasin, WRIA and site level trends.
+
+###Raw Data Processing####
 library(plyr)
 library(openxlsx)
 library(lubridate)
@@ -6,6 +20,7 @@ library(stringr)
 library(tidyverse)
 library(dplyr)
 getwd()
+
 
 atts<-read.xlsx("G:/GreenWQA/Biota/Contracts/Bellevue/2023 Report/for trends analysis/2012_taxa_attributes.xlsx")
 lookup<-read.csv("./Inputs/ORWA_TaxaTranslator_20240417.csv")##update this to latest translator table.
@@ -32,11 +47,11 @@ length(unique(raw$Site.Code))
 length(unique(raw$WRIA.Number))
 length(unique(raw$Stream.or.River))
 length(unique(raw$Subbasin))
-
 ###Kate has identified what sites she wants to run trends on. This subsets the taxa data to just those sites
 # site<-read.xlsx("./Inputs/ScoresByYear_all streams and rivers default selection.xlsx", detectDates = T, sheet="NEW - sites for trends")
 # raw2<-subset(raw, Site.Code %in% site$Site.Code)
 
+#####Taxa Mapping####
 ####Fix some names to match the translator better
 raw[raw$Taxon=="Lepidotoma-panel case larvae","Taxon"]<-"Lepidostoma-panel case larvae" ###fix this in PSSB
 
@@ -55,12 +70,12 @@ OTU[which(is.na(OTU$OTU_MetricCalc)),]
 colnames(OTU)[ncol(OTU)-1]<-"OTU"
 missing<-unique(OTU[which(is.na(OTU$OTU)), "Taxon"])## screening step to see if any taxa aren't mapped
 
-###prepare the data
+######Prepare the data####
 OTU$Visit.Date<-format(as.Date(OTU$Visit.Date, "%m/%d/%Y"))
 OTU$Year<-year(OTU$Visit.Date)
 
 OTU<-subset(OTU, is.na(QC.Replicate.Of.Sample.Code)|QC.Replicate.Of.Sample.Code=="")##remove QC replicates
-OTU<-subset(OTU, Non.B.IBI=="False")##remove non-target organisms
+# OTU<-subset(OTU, Non.B.IBI=="False")##remove non-target organisms ###update 10-30-2024-- added rolling exclusion later on to better reflect PSSB process.
 OTU[which(OTU$OTU=="DNI"),"OTU"]<-OTU[which(OTU$OTU=="DNI"),"Taxon"]###These are marked as "DNI" in BCG translation table, but they aren't on B-IBI exclusion list. Adding back in for now.
 
 OTU$Unique<-as.logical(OTU$Unique)
@@ -70,9 +85,9 @@ OTU_collapsed<-ddply(OTU, .(Visit.ID, OTU, WRIA.Number, Agency, Basin, Subbasin,
 
 OTU_collapsed$Visit.Date<-as.Date(OTU_collapsed$Visit.Date, "%Y-%m-%d")
 
-########create lookup table for taxa hierarchy. ####
+######Add correct Taxonomic Hierarchy####
+########Create lookup table for taxa hierarchy.
 #we need to  get the BCG hierarchy and the PSSB taxa hierarchy in the same format and combine them
-
 names(BCG_atts)
 names(BCG_atts[,c(1, 22,24:40)])
 hierarchy<-BCG_atts[,c(1, 22,24:40)]
@@ -104,6 +119,8 @@ append<-hierarchy[hierarchy$Taxon %in% append,] ###restrict the BCG hierarchy to
 any(duplicated(PSSB_taxa$Taxon))
 PSSB_taxa[which(duplicated(PSSB_taxa$Taxon)),] 
 
+append[append$Taxon=="Parathyas","Subclass"]<-"Acari" ##the BCG attribute table is missing subclass for this taxa, need to let Sean know to fix in next version.
+
 hier_combined<-rbind(PSSB_taxa, append) ###combine
 any(duplicated(hier_combined$Taxon))
 
@@ -112,14 +129,17 @@ OTU_collapsed<-merge(OTU_collapsed, hier_combined, by.x="OTU", by.y="Taxon", all
 any(is.na(OTU_collapsed$Phylum))
 OTU_collapsed[which(is.na(OTU_collapsed$Phylum)),]
 any(OTU_collapsed$Phylum=="")
-###################################### Roll-up by broad rules ##########
 
+#####Roll-up by broad rules ####
 KC_taxa_coarse<-OTU_collapsed
 
 KC_taxa_coarse$OTU_COARSE<-""
 names(KC_taxa_coarse)
 
 coarse_rules<-data.frame(taxa=c("Oligochaeta", "Acari", "Gastropoda","Dytiscidae", "Simuliidae", "Chironomidae", "Trichoptera"), ranktouse=c("Subclass", "Subclass", "Family", "Family", "Family", "Family", "Genus"), rank=c("Subclass", "Subclass", "Class", "Family", "Family", "Family", "Order"))
+
+# fine_rules<-data.frame(taxa=c("Oligochaeta", "Acari", "Gastropoda","Dytiscidae", "Simuliidae", "Chironomidae", "Trichoptera"), ranktouse=c("Genus", "Genus", "Genus", "Genus", "Genus", "Species", "Species"), rank=c("Subclass", "Subclass", "Class", "Family", "Family", "Family", "Order"))
+# coarse_rules<-fine_rules
 
 for (j in 1:nrow(coarse_rules)){
   
@@ -129,7 +149,7 @@ for (j in 1:nrow(coarse_rules)){
   index<-which(names(KC_taxa_coarse)== STE_rank)
   rankindex<-which(names(KC_taxa_coarse)== rank)
   halt1<-which(names(KC_taxa_coarse)== "Phylum")
-  halt2<-which(names(KC_taxa_coarse)== "Species")
+  halt2<-which(names(KC_taxa_coarse)== "Subspecies")##changed from Species to Subspecies
   
   for (i in halt2:halt1){
     if(i > index) {
@@ -144,6 +164,10 @@ for (j in 1:nrow(coarse_rules)){
 KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==""),"OTU_COARSE"]<-KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==""),"OTU"]
 
 KC_taxa_coarse[is.na(KC_taxa_coarse)]<-""
+##For fine STE, need to adjust species names in OTU column so that they include genus
+KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Species),"OTU_COARSE"]<-paste0(KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Species),"Genus"]," ", KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Species),"Species"])
+##For fine STE, need to adjust subgenus names in OTU column so that they include genus
+KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Subgenus),"OTU_COARSE"]<-paste0(KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Subgenus),"Genus"]," (", KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Subgenus),"Subgenus"], ")")
 
 library(plyr)
 OTU_collapsed2<-ddply(KC_taxa_coarse, .(Visit.ID, OTU_COARSE,Agency, WRIA.Number, Basin, 
@@ -151,8 +175,9 @@ OTU_collapsed2<-ddply(KC_taxa_coarse, .(Visit.ID, OTU_COARSE,Agency, WRIA.Number
                                         Year, Latitude, Longitude, Lab.Name, Site.Code
 ), summarize, Quantity_OTU = sum(Quantity_OTU), Unique_OTU=any(Unique_OTU))
 
-##append on correct hierarchy
+######Append on correct hierarchy after rollup####
 ###some taxa have multiple unique hierarchies because different entries got rolled up to the same level, and taxonomists have been uneven in entering in 'infraorder', 'suborder' and 'infraclass'. Need to run some loops to clean this up by selecting the most complete hierarchy available
+
 new_hierarchy<-unique(KC_taxa_coarse[,c(18:40)])
 countlength<-ddply(new_hierarchy, .(OTU_COARSE), summarize, count=length(OTU_COARSE))
 fixthese<-countlength[countlength$count>1,]
@@ -187,8 +212,8 @@ any(is.na(OTU_collapsed3$Phylum))
 unique(OTU_collapsed3[which(is.na(OTU_collapsed3$Phylum)),]$OTU_COARSE)
 any(OTU_collapsed3$Phylum=="")
 
-################read in PSSB attribute table, do rolling lookup between coarse taxa hierarchy and attribute table ############
-
+#####Add Taxa Attributes####
+################read in PSSB attribute table, do rolling lookup between coarse taxa hierarchy and attribute table 
 names(OTU_collapsed3)
 missing_atts<-unique(subset(OTU_collapsed3, select=c(17:38,1)))
 attribs2<-data.frame(Taxon.Name=character(), Predator=character(), Long.Lived=character(), Tolerant=character(), Intolerant=character(), Clinger=character(), OTU_COARSE=character(),  iter=numeric())
@@ -210,10 +235,9 @@ any(duplicated(attribs$Taxon))
 attribs[(which(duplicated(attribs$Taxon))),]
 missing<-unique(KC_taxa_coarse$OTU_COARSE)[!unique(KC_taxa_coarse$OTU_COARSE) %in% attribs$Taxon] ##These taxa do not have a match in the PSSB attribute table
 
-
-
 ##append attributes from the lookup table we made
 OTU_collapsed3<-left_join(OTU_collapsed3, attribs, by=c("OTU_COARSE"="Taxon"))
+any(OTU_collapsed3$Clinger=="")
 any(is.na(OTU_collapsed3$Clinger))
 ##Fill in attributes as "FALSE" for the taxa with no attribute matches
 OTU_collapsed3[which(is.na(OTU_collapsed3$Clinger)),"Clinger"]<-FALSE
@@ -222,11 +246,42 @@ OTU_collapsed3[which(is.na(OTU_collapsed3$Long.Lived)),"Long.Lived"]<-FALSE
 OTU_collapsed3[which(is.na(OTU_collapsed3$Predator)),"Predator"]<-FALSE
 OTU_collapsed3[which(is.na(OTU_collapsed3$Tolerant)),"Tolerant"]<-FALSE
 
+#####Taxa Exclusion####
+###make sure to exclude taxa before scoring but after mapping
+
+exlude<-read.xlsx("G:/GreenWQA/Biota/PSSB Puget Sound Stream Benthos/PSSB_exclusions.xlsx")
+exlude<-subset(exlude, select=c(Taxon.Name, Excluded))
+
+
+##Perform a series of rolling lookups to find a match in taxa hierarchies in the Taxon Name column of the exclusion table, starting with direct match, then from lowest hierarchy to highest
+
+exlude2<-data.frame(Taxon.Name=character(), Excluded=character(), OTU_COARSE=character())
+test<-unique(subset(OTU_collapsed3, select=c(17:38,1)))
+for (i in 1:ncol(test)){
+  k<-(ncol(test)+1)-i ##work backwards through the hierarchy columns
+  attribs<-merge(exlude, test[, c(k, 23)], by.x="Taxon.Name", by.y=names(test[k]))
+  # names(attribs)<-str_replace(names(attribs), "2012.", "")
+  names(attribs)<-str_replace(names(attribs), "OTU_COARSE.1", "OTU_COARSE")
+  exlude2<-rbind(attribs, exlude2)
+  test<-subset(test, !OTU_COARSE %in% exlude2$OTU_COARSE)
+}
+
+exlude2<-subset(exlude2, Excluded==T)
+exlude2<-unique(exlude2)
+OTU_collapsed3<-merge(OTU_collapsed3, exlude2, by="OTU_COARSE", all.x=T)
+OTU_collapsed3<-subset(OTU_collapsed3, is.na(Excluded)|Excluded==F)
+OTU_collapsed3<-OTU_collapsed3[,c(1:43)]
+
+
+
+
 
 
 write.csv(OTU_collapsed3, "Collapsed_Coarse_Taxa.csv")
 OTU_collapsed3<-read.csv( "Collapsed_Coarse_Taxa.csv")
 
+
+###Subsampling####
 ##The rarify function below is similar to how subsampling was done for the trends report.
 rarify<- function (inbug, sample.ID, abund, subsize, taxa, mySeed = NA)
 { #set.seed(mySeed)
@@ -259,7 +314,7 @@ KC_rarified<-rarify(inbug=OTU_collapsed3,
                     taxa="OTU_COARSE")
 
 
-
+###Score####
 detach("package:plyr", unload = TRUE)
 
 str(KC_rarified)
@@ -287,6 +342,7 @@ KC_results<-Reduce(function(x, y, ...) merge(x,y, all=TRUE, ...), list(Tot_Richn
 KC_results<-KC_results %>% mutate(Tol_Percent=Tol_Abund/Tot_Abund*100, Pred_Percent= Pred_Abund/Tot_Abund*100, Dom_Percent= Dom_Abund/Tot_Abund*100)
 KC_results[is.na(KC_results)]<-0
 
+##Coarse scoring
 KC_results<-KC_results %>% mutate(Tot_Richness_Score= 10 * (Total_Richness-16)/(37-16))
 KC_results<-KC_results %>% mutate(E_Richness_Score= 10 * (E_Richness-1)/(8-1))
 KC_results<-KC_results %>% mutate(P_Richness_Score= 10 * (P_Richness-1)/(8-1))
@@ -297,6 +353,18 @@ KC_results<-KC_results %>% mutate(Intol_Richness_Score= 10 * (Intol_Richness-0)/
 KC_results<-KC_results %>% mutate(Dom_Percent_Score= 10-(10 * (Dom_Percent-44)/(82-44)))
 KC_results<-KC_results %>% mutate(Pred_Percent_Score= 10 * (Pred_Percent-1)/(21-1))
 KC_results<-KC_results %>% mutate(Tol_Percent_Score= 10-(10 * (Tol_Percent-0)/(43-0)))
+
+# ####fine scoring
+# KC_results<-KC_results %>% mutate(Tot_Richness_Score= 10 * (Total_Richness-27)/(56-27))
+# KC_results<-KC_results %>% mutate(E_Richness_Score= 10 * (E_Richness-1)/(8-1))
+# KC_results<-KC_results %>% mutate(P_Richness_Score= 10 * (P_Richness-1)/(8-1))
+# KC_results<-KC_results %>% mutate(T_Richness_Score= 10 * (T_Richness-1)/(9-1))
+# KC_results<-KC_results %>% mutate(Cling_Richness_Score= 10 * (Clin_Richness-7)/(24-7))
+# KC_results<-KC_results %>% mutate(LL_Richness_Score= 10 * (LL_Richness-2)/(10-2))
+# KC_results<-KC_results %>% mutate(Intol_Richness_Score= 10 * (Intol_Richness-0)/(7-0))
+# KC_results<-KC_results %>% mutate(Dom_Percent_Score= 10-(10 * (Dom_Percent-32)/(69-32)))
+# KC_results<-KC_results %>% mutate(Pred_Percent_Score= 10 * (Pred_Percent-1)/(21-1))
+# KC_results<-KC_results %>% mutate(Tol_Percent_Score= 10-(10 * (Tol_Percent-0)/(43-0)))
 
 KC_results[which(KC_results$Tot_Richness_Score>10),"Tot_Richness_Score"]<-10
 KC_results[which(KC_results$Tot_Richness_Score<0),"Tot_Richness_Score"]<-0
@@ -330,7 +398,7 @@ KC_results<-left_join(KC_results, unique(subset(raw, select=c(Visit.ID, Latitude
 write.csv(KC_results, "B-IBI_results_PSSB_Scores.csv")
 
 
-###############
+####Trends####
 
 
 library(stringr)
@@ -344,7 +412,7 @@ library(rkt)
 library(plyr)
 library(tidyverse)
 ####note: we've changed subsampling number to 450 and removed samples with total abundance <450 for greater statistical consistency in richness between samples over time
-# bibi<-KC_results
+bibi<-KC_results
 unique(bibi$Site.Code)
 bibi <-read.csv("B-IBI_results_PSSB_Scores.csv")
 bibi<-subset(bibi, Tot_Abund>=450)
@@ -379,7 +447,7 @@ meanscore<-ggplot(meanscores, aes(x=Year, y=meanScore))+geom_smooth(method="lm",
 median(bibi.lr1$Overall.Score)
 median(bibi.lr1$Year)
 
-##calculating intercept for RKT derived Sen-Theil line for Overall Score (0.38; calculated later in the code), from https://pubs.usgs.gov/tm/2006/tm4a7/pdf/USGSTM4A7.pdf pdf page 15, and https://rdrr.io/github/USGS-R/HASP/src/R/statistics.R
+##calculating intercept for RKT derived Sen-Theil line for Overall Score (0.38 is the Sen Theil slope for the RKT of overall score, calculated later in the code), from https://pubs.usgs.gov/tm/2006/tm4a7/pdf/USGSTM4A7.pdf pdf page 15, and https://rdrr.io/github/USGS-R/HASP/src/R/statistics.R
 median(bibi.lr1$Overall.Score)-(0.38*median(bibi.lr1$Year))
 
 
@@ -394,7 +462,7 @@ scores<-ggplot(bibi.lr1 )+
   # geom_smooth(data=meanscores, mapping=aes(x=as.numeric(paste0(Year)), y=meanScore), method="lm",se=F)+
   labs(y="Overall Score", x="Year")+ theme(text = element_text(size = 28))+
   # geom_quantile(data=bibi.lr1, mapping=aes(x=as.numeric(paste0(Year)), y=Overall.Score), quantiles=.5, color="red", size=1)#+
-geom_abline(slope=0.38, intercept = -713.7596, color="red", lwd=1)##adding Sen-Theil line and intercept calculated above
+geom_abline(slope=0.38, intercept = -711.2844, color="red", lwd=1)##adding Sen-Theil line and intercept calculated above
 
 
 names(bibi.lr1)
@@ -672,7 +740,7 @@ pp<-ggplot(bibi, aes(as.numeric(Year), get(str_subset(colnames(bibi[,c(1:18)]), 
   facet_wrap(~ Subbasin, ncol = 4) +  #factor(stream2) + 
   theme(legend.position="none",axis.title=element_text(size=20,face="bold"), axis.text=element_text(size=15), axis.text.x = element_text(angle = 90), strip.text = element_text(size=12)) + labs(y = var, x = "Year")
 pp<-pp+geom_abline(aes(intercept=get(paste0("MKinter_",str_split(var, "_", n=2)[[1]][2])),slope=get(paste0("MKSlope_",str_split(var, "_", n=2)[[1]][2])),  colour=get(scal)))+
-  scale_colour_manual(values=rep(brewer.pal(8,"Dark2"), times=20))
+  scale_colour_manual(values=rep(brewer.pal(8,"Dark2"), times=30))
 # pp<-pp+geom_text(mapping= aes(x=2012, y=6, label=paste("Slope = ", round(get(paste0("MKSlope_",str_split(var, "_", n=2)[[1]][2])), 3))), colour="black")+theme(text=element_text(size=20), plot.title=element_text(hjust=.5, size=24, face="bold"))
 # ggsave(paste0("WRIA9_BIBI~timeUp_", scal, "_", var,   "-2.png"), plot = pp, width=20, height=10)
 # }
