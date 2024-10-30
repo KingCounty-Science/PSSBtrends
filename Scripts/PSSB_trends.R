@@ -22,7 +22,7 @@ library(dplyr)
 getwd()
 
 
-atts<-read.xlsx("G:/GreenWQA/Biota/Contracts/Bellevue/2023 Report/for trends analysis/2012_taxa_attributes.xlsx")
+atts<-read.xlsx("./Inputs/2012_taxa_attributes.xlsx")
 lookup<-read.csv("./Inputs/ORWA_TaxaTranslator_20240417.csv")##update this to latest translator table.
 BCG_atts<-read.csv("./Inputs/ORWA_Attributes_20240417.csv")#load the BCG taxonomic hierarchy
 
@@ -249,7 +249,7 @@ OTU_collapsed3[which(is.na(OTU_collapsed3$Tolerant)),"Tolerant"]<-FALSE
 #####Taxa Exclusion####
 ###make sure to exclude taxa before scoring but after mapping
 
-exlude<-read.xlsx("G:/GreenWQA/Biota/PSSB Puget Sound Stream Benthos/PSSB_exclusions.xlsx")
+exlude<-read.xlsx("./Inputs/PSSB_exclusions.xlsx")
 exlude<-subset(exlude, select=c(Taxon.Name, Excluded))
 
 
