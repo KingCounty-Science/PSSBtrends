@@ -38,7 +38,7 @@ taxaBind <- function(file.path) {
 
 }
 
-file.path="./Inputs/taxonomy data/"
+file.path="./Inputs/taxonomy_data/"
 raw<-taxaBind(file.path)
 
 length(unique(raw$Project))
@@ -77,6 +77,7 @@ OTU$Year<-year(OTU$Visit.Date)
 OTU<-subset(OTU, is.na(QC.Replicate.Of.Sample.Code)|QC.Replicate.Of.Sample.Code=="")##remove QC replicates
 # OTU<-subset(OTU, Non.B.IBI=="False")##remove non-target organisms ###update 10-30-2024-- added rolling exclusion later on to better reflect PSSB process.
 OTU[which(OTU$OTU=="DNI"),"OTU"]<-OTU[which(OTU$OTU=="DNI"),"Taxon"]###These are marked as "DNI" in BCG translation table, but they aren't on B-IBI exclusion list. Adding back in for now.
+OTU[which(is.na(OTU$OTU)),"OTU"]<-OTU[which(is.na(OTU$OTU)),"Taxon"]###These are taxa without a translation in BCG translation table. Adding back in as-is for now.
 
 OTU$Unique<-as.logical(OTU$Unique)
 
@@ -211,6 +212,7 @@ OTU_collapsed3<-merge(OTU_collapsed2, new_hierarchy, by.x="OTU_COARSE", by.y="OT
 any(is.na(OTU_collapsed3$Phylum))
 unique(OTU_collapsed3[which(is.na(OTU_collapsed3$Phylum)),]$OTU_COARSE)
 any(OTU_collapsed3$Phylum=="")
+exam<-OTU_collapsed3[which(OTU_collapsed3$Phylum==""),]
 
 #####Add Taxa Attributes####
 ################read in PSSB attribute table, do rolling lookup between coarse taxa hierarchy and attribute table 
