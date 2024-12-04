@@ -2,9 +2,6 @@
 
 
 setwd(here::here())
-# setwd("./outputs")
-# rawcounts<-read.csv("Collapsed_Coarse_Taxa.csv")
-
 
 ###Raw Data Processing####
 library(plyr)
@@ -266,7 +263,7 @@ OTU_collapsed3<-merge(OTU_collapsed3, exlude2, by="OTU_COARSE", all.x=T)
 OTU_collapsed3<-subset(OTU_collapsed3, is.na(Excluded)|Excluded==F)
 OTU_collapsed3<-OTU_collapsed3[,c(1:44)]
 
-write.csv(OTU_collapsed3, "Collapsed_Coarse_Taxa_taxa_trends.csv")
+write.csv(OTU_collapsed3, "Collapsed_Coarse_Taxa_for_trends.csv")
 ##########Convert to Density####
 # missinggrids<-raw[raw$Sample.Code %in% missinggridinfo$Sample.Code,c("Sample.Code","Surface.Area", "Sampling.Grid.Squares.Counted", "Total.Sampling.Grid.Squares")]
 # missinggrids[,c("Sample.Code","Surface.Area", "Sampling.Grid.Squares.Counted", "Total.Sampling.Grid.Squares")]<-missinggridinfo[match(missinggrids$Sample.Code, missinggridinfo$Sample.Code),c("Sample.Code","Surface.Area", "Sampling.Grid.Squares.Counted", "Total.Sampling.Grid.Squares")]
