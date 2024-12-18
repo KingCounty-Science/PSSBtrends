@@ -47,6 +47,7 @@ length(unique(raw$Site.Code))
 length(unique(raw$WRIA.Number))
 length(unique(raw$Stream.or.River))
 length(unique(raw$Subbasin))
+
 ###Kate has identified what sites she wants to run trends on. This subsets the taxa data to just those sites
 # site<-read.xlsx("./Inputs/ScoresByYear_all streams and rivers default selection.xlsx", detectDates = T, sheet="NEW - sites for trends")
 # raw2<-subset(raw, Site.Code %in% site$Site.Code)

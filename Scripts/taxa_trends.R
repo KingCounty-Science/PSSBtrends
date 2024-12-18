@@ -309,7 +309,7 @@ counts<-subset(counts, Agency=="King County - DNRP"&Year>2001&Project!="Regulato
 counts<-subset(counts, select=-X)
 ##Append _UNIQUE to unique coarse OTUs
 counts$OTU_COARSE_Unique<-ifelse(counts$Unique_OTU, paste0(counts$OTU_COARSE, "_UNIQUE"), counts$OTU_COARSE)
-
+counts<-subset(counts, !is.na(density)) ##remove samples where density could not be calculated because area sampled, or grid count fields not populated
 
 ##################DPAC Preparation####
 
@@ -317,6 +317,7 @@ names(counts)
 counts2<-counts[, c(3,2, 1,52,15, 50,17)] ##get just minimum sample data needed: Sample.Code, Visit.ID, Taxon Name, Taxon Name _Unique, Site.Code, density, and Unique 
 counts2[which(duplicated(counts2)),] #make sure no data is duplicated
 
+#counts2<-subset(counts2, Sample.Code=="WAM06600-GLEN01-2010")
 cast<- reshape2::dcast(counts2, OTU_COARSE+OTU_COARSE_Unique+Unique_OTU~Sample.Code, sum, value.var="density") ##reshape the data to wide format for DPAC
 
 ##add on hierarchical info
@@ -329,8 +330,7 @@ hier[hier$Species!=""&!is.na(hier$Species),"Species"]<-hier[hier$Species!=""&!is
 hier[hier$Subgenus!=""&!is.na(hier$Subgenus),"Subgenus"]<-hier[hier$Subgenus!=""&!is.na(hier$Subgenus),"OTU_COARSE"]
 cast<-merge(cast, hier, by="OTU_COARSE") ##append hierarchies
 names(cast)
-
-cast<-cast[cast$OTU_COARSE_Unique!="NA_UNIQUE",]##These are Vashon sites with taxa that were not in the lookup table...need to figure out what to do with these guys
+cast<-cast[cast$OTU_COARSE_Unique!="NA_UNIQUE",]##These are Vashon sites with taxa that were not in the lookup table...need to figure out what to do with these guys ## Note 12/5/2024, we removed these by screening out samples from the Regulatory Effectiveness project in previous lines of code
 names(cast)
 
 ####Append _UNIQUE to hierarchies that match each unique coarse OTU, so that the code doesn't distribute uniquely identified taxa
@@ -352,12 +352,15 @@ for ( i in 1:nrow(cast)){
 
 cast[cast==""]<-NA ##Any blank hierarchies convert to NA
 
-comm=cast[, c(2,4:(ncol(cast)-22))] ##select columns OTU_COARSE_Unique, and all Visit.IDs
+
+comm=cast[, c(2,4:(ncol(cast)-22))] ##select columns OTU_COARSE_Unique, and all Visit.IDs or Sample.Codes
 hier=cast[,c(2,(ncol(cast)-21):ncol(cast))] ##select columns OTU_COARSE_Unique and all hierarchical data
 taxa.var="OTU_COARSE_Unique" ##identify column used for identification (OTU_COARSE_Unique)
 out<-list(comm=comm, hier=hier, taxa.var=taxa.var)
 class(out) <- "wide_class"
 
+
+###function is modified from https://github.com/eduardszoecs/restax/tree/master 
 mod_dpac_s<-function (x, value.var.cols = NULL) 
 {
   
@@ -385,43 +388,45 @@ mod_dpac_s<-function (x, value.var.cols = NULL)
     lev <- rev(names(hier))
     lev <- lev[!lev %in% taxa.var]
     foo <- function(y, value.var) {
-      # print(y[,which(names(y)==i)])
+       #print(y[,which(names(y)==i)])
       if(all(is.na(y[,which(names(y)==i)]))){
         return(y)
       }
       else{
         if((which(names(y) == i) + 1)==(ncol(hier)-1)){
-          childs <- !is.na(y[, which(names(y) == i) + 1])
+          childs <- !is.na(y[, which(names(y) == i) + 1])&y[,value.var]!=0
         }
         else{
-          childs <- apply(!is.na(y[, c((which(names(y) == i) + 1):(ncol(hier)-1))]), 1, any)
+          childs <- apply(!is.na(y[, c((which(names(y) == i) + 1):(ncol(hier)-1))])&y[,value.var]!=0, 1, any)
         }
         y[childs, taxa.var]
-        parent <- !childs
+        parent <- !childs&y[,value.var]!=0
         y[parent, taxa.var]
-        if (sum(y[childs, value.var]) == 0 | all(childs)) {
+      
+        if (sum(y[childs, value.var]) == 0 | all(childs)|sum(parent)==0) {
           return(y)
         }
         else {
           w <- y[childs, value.var]/sum(y[childs, value.var])
-          y[childs, "Quantity_new"] <- y[childs, value.var] + y[parent, value.var] * w
-          y[parent, "Quantity_new"] <- 0
+          y[childs, value.var] <- y[childs, value.var] + y[parent, value.var] * w
+          y[parent, value.var] <- 0
           y$ambp[parent] <- TRUE
           y$assigned[parent]<-paste(c(y[childs, taxa.var]), collapse=", ")
           return(y)
         }
       }}
+
     wdf <- cbind(hier, comm)
     wdf$ambp <- FALSE
-    wdf$Quantity_new<-wdf[,value.var]
+    wdf$Quantity_old<-wdf[,value.var]
     wdf$ID<-value.var
     wdf$assigned<-""
-    wdf<-subset(wdf, get(value.var)>0)
+
     for (i in lev[-1]) {
       wdf <- ddply(wdf, i, foo, value.var)
     }
     
-    names(wdf)[which(names(wdf)==value.var)]<-"Quantity_old"
+    names(wdf)[which(names(wdf)==value.var)]<-"Quantity_new"
     commout <- wdf[, c("ID", taxa.var, "Quantity_old", "Quantity_new",  "ambp", "assigned")]
     
     temp<-rbind(temp, commout)
@@ -440,7 +445,7 @@ write.csv(dpac_out, "dpac_out.csv") #02012023 version, fixed Tipulidae s.l. taxo
 
 dpac_out<-read.csv("dpac_out.csv")
 
-#####################taxa tremds
+#####################taxa trends
 
 library(rkt)
 library(EnvStats)
@@ -455,6 +460,7 @@ lookup<-unique(lookup)
 
 # data<-read.csv("dpac_out.csv", header=T)
 data<-dpac_out
+data<-subset(data, select=c(-X))
 data<-subset(data, Quantity_new!=0)### remove ambiguous taxa that have been re-assigned
 data[which(duplicated(data[,c(1,2)])),]
 data$OTU_COARSE_Unique<-str_replace(data$OTU_COARSE_Unique, "_UNIQUE", "") ##Remove "_UNIQUE"
@@ -467,6 +473,8 @@ data<-subset(data, !ID %in% excludereplicates)
 data[which(duplicated(data[,c(1,2)])),]
 
 
+##We want to analyze trends only for samples with at least 450 organisms to be consistent with B-IBI trend dataset.
+rawcounts<-read.csv("Collapsed_Coarse_Taxa_taxa_trends.csv")
 keep<-ddply(rawcounts, .(Sample.Code, Visit.ID), summarize, sumorgs=sum(Quantity_OTU))
 keep<-subset(keep, sumorgs>=450)
 data<-subset(data, ID %in% keep$Sample.Code)
@@ -480,7 +488,7 @@ data$year <- format(as.Date(data$Visit.Date, '%Y-%m-%d'), "%Y") # add year colum
 data <- droplevels(data[data$month %in% c('07', '08', '09', '10'),]) # exclude samples collected outside of July - Oct
 data <- droplevels(data[data$year > 2001,]) # subset to sites since 2002
 # data<-subset(data, year<=2020) ##subset thru 2020
-fixDUW<-unique(counts[counts$Sample.Code=="09DUW0277/05",]$Visit.ID)
+fixDUW<-unique(counts[counts$Sample.Code=="09DUW0277/05",]$Visit.ID) ##This sample got assigned to the wrong site in PSSB. Need to fix
 data[data$ID==fixDUW,"Site.Code"] <-"09DUW0277" ##Correct SiteID
 data[data$ID==fixDUW,"Stream.or.River"] <-"Riverton Creek (003D)" ##Correct SiteID
 data[data$ID==fixDUW,"Subbasin"] <-"Duwamish River Subbasin" ##Correct SiteID
@@ -510,13 +518,14 @@ data$Sample.Code <- data$ID # add sample identifier
 
 
 ###2/9/2021 update fix some taxa that should be rolled up###
+##12/18/2024##These were based on conversations with Kate Macneale. Need her review for updated taxa trends. Edited some lines to make it work now that taxa mapping has been applied
 data$Leuctridae<-rowSums(data[, c("Moselia", "Despaxia.augusta", "Leuctridae")], na.rm=T)
-data$Clinocerinae<-rowSums(data[, c("Wiedemannia", "Trichoclinocera", "Roederiodes", "Empididae.Genus.B", "Clinocera")], na.rm=T)
-data$Hemerodromiinae<-rowSums(data[, c("Hemerodromiinae", "Hemerodromia", "Chelifera_Metachela", "Neoplasta")], na.rm=T)
+data$Clinocerinae<-rowSums(data[, c("Wiedemannia", "Trichoclinocera", "Roederiodes", "Clinocera")], na.rm=T) ##removed "Empididae.Genus.B" from this, got mapped out
+data$Hemerodromiinae<-rowSums(data[, c("Hemerodromia", "Chelifera_Metachela", "Neoplasta")], na.rm=T) #Removed "Hemerodromiinae" from this, got mapped out
 data$Sphaeriidae<-rowSums(data[,c("Pisidium","Sphaerium","Sphaeriidae")], na.rm=T)
-data$Glossiphoniidae<-rowSums(data[,c("Glossiphoniidae","Glossiphonia.elegans","Helobdella.stagnalis")], na.rm=T)
+##data$Glossiphoniidae<-rowSums(data[,c("Glossiphoniidae","Glossiphonia.elegans","Helobdella.stagnalis")], na.rm=T) #have Kate review the taxa list for this
 data$Hydrophilidae<-rowSums(data[,c("Hydrophilidae","Ametor","Anacaena", "Laccobius")], na.rm=T) ###,"Laccobius"
-data$Gomphidae<-rowSums(data[,c("Gomphidae","Octogomphus.specularis")], na.rm=T)
+#data$Gomphidae<-rowSums(data[,c("Gomphidae", "Octogomphus.specularis")], na.rm=T)#have Kate review the taxa list for this
 data$Kogotus.Rickera.Cultus<-rowSums(data[,c("Kogotus_Rickera","Perlodidae","Cultus")], na.rm=T)
 data$Hydroptila<-rowSums(data[,c("Hydroptilidae","Hydroptila")], na.rm=T)
 data$Uenoidae..s.l.<-data$Uenoidae.s.l.##"Thremmatidae"
@@ -524,14 +533,14 @@ data$Trepaxonemata<-rowSums(data[,c("Trepaxonemata","Polycelis")], na.rm=T)
 data$Optioservus<-rowSums(data[,c("Optioservus","Elmidae")], na.rm=T) ##Rotate through adding Elmidae to these taxa to see if it effects trends: Cleptelmis addenda, Heterlimnius.corpulentus, Lara, Narpus, Optioservus, Zaitzevia
 
 
-data<-subset(data, select=-c(Sphaerium, Pisidium, Glossiphonia.elegans,Helobdella.stagnalis,
-                             Ametor,Anacaena,Octogomphus.specularis,Kogotus_Rickera,Perlodidae,
-                             Cultus,Hydroptilidae,Uenoidae.s.l.,Polycelis,Elmidae, Moselia, Laccobius, Despaxia.augusta, 
-                             Wiedemannia, Trichoclinocera, Roederiodes, Empididae.Genus.B, Clinocera, Hemerodromia, Chelifera_Metachela, Neoplasta))#Laccobius, Thremmatidae
+data<-subset(data, select=-c(Sphaerium, Pisidium, 
+                             Ametor,Anacaena,Kogotus_Rickera,Perlodidae,
+                             Cultus,Hydroptilidae,Polycelis,Elmidae, Moselia, Laccobius, Despaxia.augusta, 
+                             Wiedemannia, Trichoclinocera, Roederiodes,  Clinocera, Hemerodromia, Chelifera_Metachela, Neoplasta))#Laccobius, Thremmatidae, Glossiphonia.elegans,Helobdella.stagnalis,Octogomphus.specularis,Uenoidae.s.l.,Empididae.Genus.B,
 
 names(data)
-names(data[c(1:238, 252:254, 239:251)])
-data<-data[c(1:238, 252:254, 239:251)]### make sure all the taxa count data is before the metadata
+names(data[c(1:306, 320:321, 307:319)])
+data<-data[c(1:306, 320:321, 307:319)]### make sure all the taxa count data is before the metadata
 
 
 
@@ -583,7 +592,7 @@ data_freq3<-data_freq %>% group_by(year) %>% summarise_if(is.numeric, sum) #freq
 names(data_freq3)
 nsamp<-ddply(data, .(year), summarize, nsamp=length(unique(ID)))
 data_freq3<-merge(data_freq3, nsamp, by.x="year", by.y="year")
-data_freq3<-data_freq3 %>% mutate(across(Acari:Uenoidae..s.l., function(x) x/nsamp*100))
+data_freq3<-data_freq3 %>% mutate(across(Acari:Hemerodromiinae, function(x) x/nsamp*100))
 data_freq3<-subset(data_freq3, select=-nsamp)
 
 # test<-reshape2::melt(data_freq3, id.vars=c("year", "Visit.ID", "WRIA.Number", "Year", "month", "por"))
@@ -620,12 +629,12 @@ nrow(subset(data.freq_trend, trend!="none"))
 subset(data.freq_trend, trend!="none")
 subset(data.freq_trend, pval<.1)
 unique(data.freq_trend$taxon)
-write.csv(data.freq_trend, "region_pres-abs_density_03132023_2002-2021.csv")
+write.csv(data.freq_trend, "region_pres-abs_density.csv")
 
 
 ####Look for trends in frequency of occurrence across streams, year to year. 
 ### A positive trend indicates the taxa is occurring at more streams over time.
-
+library(EnvStats)
 data.freq_trend2<-data.frame(taxon=character(), mk.tau=double(), mk.Sen=double(),mk.pval=double(), mk.inter=double(), mk.trend=character(),samples=double(), sum.taxon=double(), stringsAsFactors = F)
 names(data_freq3)
 for (i in 7:ncol(data_freq3)) {
@@ -652,12 +661,13 @@ for (i in 7:ncol(data_freq3)) {
 nrow(subset(data.freq_trend2, mk.trend!="none"))
 subset(data.freq_trend2, mk.trend!="none")
 subset(data.freq_trend2, mk.pval<.1)
-write.csv(data.freq_trend2, "freq_of_occurrence_density_10122023_2002-2021.csv")
+write.csv(data.freq_trend2, "freq_of_occurrence_density.csv")
 
+##looking to see how the presence of many ties (mainly from 0's) in the data affects results. 
 test<-reshape2::melt(data_freq3, id.vars=c("year", "Visit.ID", "WRIA.Number", "Year", "month", "por"))
 library(plyr)
 ties<-subset(ddply(test, .(variable, value), summarize, ties=length(value)), ties>1)
-FOQ<-read.csv("freq_of_occurrence_density_10122023_2002-2021.csv")
+FOQ<-read.csv("freq_of_occurrence_density.csv")
 FOQ_none<-subset(FOQ, mk.trend=="none")
 ties[ties$variable %in% FOQ_none$taxon,]
 ddply(test, .(variable), summarize, nyears=length(value))
@@ -677,6 +687,7 @@ data$year<-as.numeric(data$year)
 
 metrics<-colnames(data)[3:(ncol(data)-14)]
 data.lr1<-data.frame(taxon=character(), rkt.pval=double(),rkt.Sen=double(), rkt.tau=double(), RKTtrend=character(),  samples=double(), sum.taxon=double(), stringsAsFactors = F)
+library(rkt)
 # each<-metrics[248]
 # each<-"Heterlimnius.corpulentus"
 for (each in metrics) {
@@ -709,7 +720,7 @@ subset(data.lr1, RKTtrend!="none")
 subset(data.lr1, rkt.pval<.1)
 data.lr1$rkt.pval
 str(data.lr)
-write.csv(data.lr1, "regionwide_abundance_trends_RKT_density_03132023_2002-2021.csv")
+write.csv(data.lr1, "regionwide_abundance_trends.csv")
 
 
 #### Site/Basin trends ####
@@ -748,7 +759,7 @@ for (var in form) {
 nrow(subset(data.lr3, trend!="none"))
 nrow(subset(data.lr3, pval<.1))
 subset(data.lr3, pval<.1)
-write.csv(data.lr3, paste0(scal,"_pres-abs_density_03132023_2002-2021.csv"))
+write.csv(data.lr3, paste0(scal,"_pres-abs_density.csv"))
 
 
 ##### Look for Abundance trends by site ### 
@@ -779,7 +790,7 @@ for (var in form){
 
 subset(data.lr2, trend!="none")
 subset(data.lr2, mk.pval<.1)
-write.csv(data.lr2, "Site.Code_abundance_trends_density_03132023_2002-2021.csv")
+write.csv(data.lr2, "Site.Code_abundance_trends_density.csv")
 
 ##### Look for Spread trends by Basin ### 
 
@@ -811,7 +822,7 @@ for (var in form){
 
 subset(data.lr2, trend!="none")
 subset(data.lr2, mk.pval<.1)
-write.csv(data.lr2,  "Subbasin_Spread_trends_density_03132023_2002-2021.csv")
+write.csv(data.lr2,  "Subbasin_Spread_trends_density.csv")
 
 
 #Look for RKT abundance trends by basin ####
@@ -859,5 +870,5 @@ for (each in form){
 
 nrow(subset(data.lr2, RKTtrend!="none"))
 subset(data.lr2, rkt.pval<.05)
-write.csv(data.lr2, "Subbasin_abundance_trends_RKT_density_03132023_2002-2021.csv")
+write.csv(data.lr2, "Subbasin_abundance_trends.csv")
 
