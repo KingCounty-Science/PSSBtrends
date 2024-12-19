@@ -41,6 +41,10 @@ taxaBind <- function(file.path) {
 file.path="./Inputs/taxonomy_data/"
 raw<-taxaBind(file.path)
 
+##Iswaeon is entered as a species in PSSB, but this is really a genus.
+raw[raw$Taxon=="Iswaeon","Genus"]<-"Iswaeon"
+raw[raw$Taxon=="Iswaeon","Species"]<-""
+
 length(unique(raw$Project))
 length(unique(raw$Agency))
 length(unique(raw$Site.Code))
@@ -82,10 +86,7 @@ OTU[which(is.na(OTU$OTU)),"OTU"]<-OTU[which(is.na(OTU$OTU)),"Taxon"]###These are
 
 OTU$Unique<-as.logical(OTU$Unique)
 
-##collapse to Visit.ID, because 1998-2015 samples were often three reps of 3 sq ft with different sample names for each rep
-OTU_collapsed<-ddply(OTU, .(Visit.ID, OTU, WRIA.Number, Agency, Basin, Subbasin, Stream.or.River, Project, Visit.Date, Year, Latitude, Longitude, Lab.Name, Site.Code), summarize, Quantity_OTU = sum(Quantity), Unique_OTU=any(Unique))
 
-OTU_collapsed$Visit.Date<-as.Date(OTU_collapsed$Visit.Date, "%Y-%m-%d")
 
 ######Add correct Taxonomic Hierarchy####
 ########Create lookup table for taxa hierarchy.
@@ -166,10 +167,10 @@ for (j in 1:nrow(coarse_rules)){
 KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==""),"OTU_COARSE"]<-KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==""),"OTU"]
 
 KC_taxa_coarse[is.na(KC_taxa_coarse)]<-""
-##For fine STE, need to adjust species names in OTU column so that they include genus
-KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Species),"OTU_COARSE"]<-paste0(KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Species),"Genus"]," ", KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Species),"Species"])
-##For fine STE, need to adjust subgenus names in OTU column so that they include genus
-KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Subgenus),"OTU_COARSE"]<-paste0(KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Subgenus),"Genus"]," (", KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Subgenus),"Subgenus"], ")")
+# ##For fine STE, need to adjust species names in OTU column so that they include genus
+# KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Species),"OTU_COARSE"]<-paste0(KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Species),"Genus"]," ", KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Species),"Species"])
+# ##For fine STE, need to adjust subgenus names in OTU column so that they include genus
+# KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Subgenus),"OTU_COARSE"]<-paste0(KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Subgenus),"Genus"]," (", KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Subgenus),"Subgenus"], ")")
 
 library(plyr)
 OTU_collapsed2<-ddply(KC_taxa_coarse, .(Visit.ID, OTU_COARSE,Agency, WRIA.Number, Basin, 
@@ -419,6 +420,8 @@ bibi<-KC_results
 unique(bibi$Site.Code)
 bibi <-read.csv("B-IBI_results_PSSB_Scores.csv")
 bibi<-subset(bibi, Tot_Abund>=450)
+bibi<-subset(bibi, Agency=="King County - DNRP")
+bibi<-subset(bibi, Year>2001)
 unique(bibi$Site.Code)
 
 #########  Format, remove data from wrong months, average scores from samples with same site+year, and subset B-IBI data to data since 2001 with more than 9 years of data
@@ -428,7 +431,15 @@ bibi$sampnum <- paste(bibi$Trend_station, format(as.Date(bibi$Visit.Date, '%Y-%m
 bibi <- droplevels(bibi[bibi$month %in% c('07', '08', '09', '10'),]) # exclude samples collected outside of July - Oct
 dups<-bibi[duplicated(bibi[,c("Project" , "WRIA.Number"  , "Basin" , "Subbasin" , "Stream.or.River" , "Site.Code", "Year")]),]
 
-bibi <-aggregate(cbind( Overall.Score, Tot_Richness_Score, E_Richness_Score, P_Richness_Score, T_Richness_Score, Cling_Richness_Score, LL_Richness_Score, Intol_Richness_Score, Dom_Percent_Score,  Pred_Percent_Score, Tol_Percent_Score) ~   Site.Code + Subbasin +WRIA.Number+ Year, data = bibi, FUN = "mean", na.action = na.exclude)
+
+##re-write this to not drop rows where WRIA is NA
+#bibi <-aggregate(cbind( Overall.Score, Tot_Richness_Score, E_Richness_Score, P_Richness_Score, T_Richness_Score, Cling_Richness_Score, LL_Richness_Score, Intol_Richness_Score, Dom_Percent_Score,  Pred_Percent_Score, Tol_Percent_Score) ~   Site.Code + Subbasin +WRIA.Number+ Year, data = bibi, FUN = "mean", na.action = na.exclude)
+
+detach("package:plyr", unload=TRUE)
+
+bibi<-bibi %>% group_by(Site.Code, Subbasin, WRIA.Number, Year) %>% summarize(Overall.Score= mean(Overall.Score), Tot_Richness_Score=mean(Tot_Richness_Score), E_Richness_Score=mean(E_Richness_Score), P_Richness_Score=mean(P_Richness_Score), T_Richness_Score=mean(T_Richness_Score), Cling_Richness_Score=mean(Cling_Richness_Score), LL_Richness_Score=mean(LL_Richness_Score), Intol_Richness_Score=mean(Intol_Richness_Score), Dom_Percent_Score=mean(Dom_Percent_Score), Pred_Percent_Score=mean(Pred_Percent_Score), Tol_Percent_Score=mean(Tol_Percent_Score))
+
+
 
 bibi.lr<-bibi
 bibi.lr1<-bibi.lr
@@ -441,6 +452,7 @@ ggplot(bibi.lr, aes(x=Year, y=Overall.Score))+geom_smooth(se=F)+theme(legend.pos
 
 
 library(ggpmisc)
+library(plyr)
 
 meanscores<-ddply(bibi.lr1, .(Year), summarize, meanScore=mean(Overall.Score), nyears=length(unique(Site.Code)), sd=sd(Overall.Score), min=min(Overall.Score), max=max(Overall.Score), median=median(Overall.Score))
 meanscore<-ggplot(meanscores, aes(x=Year, y=meanScore))+geom_smooth(method="lm",se=F)+theme(legend.position = "none")+

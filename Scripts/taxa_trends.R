@@ -267,8 +267,10 @@ write.csv(OTU_collapsed3, "Collapsed_Coarse_Taxa_for_trends.csv")
 ##########Convert to Density####
 # missinggrids<-raw[raw$Sample.Code %in% missinggridinfo$Sample.Code,c("Sample.Code","Surface.Area", "Sampling.Grid.Squares.Counted", "Total.Sampling.Grid.Squares")]
 # missinggrids[,c("Sample.Code","Surface.Area", "Sampling.Grid.Squares.Counted", "Total.Sampling.Grid.Squares")]<-missinggridinfo[match(missinggrids$Sample.Code, missinggridinfo$Sample.Code),c("Sample.Code","Surface.Area", "Sampling.Grid.Squares.Counted", "Total.Sampling.Grid.Squares")]
+OTU_collapsed3<-read.csv( "Collapsed_Coarse_Taxa_for_trends.csv")
 setwd(here::here())
 setwd("./inputs")
+
 # merged_OTU<-read.csv("Merged_data_OTUs.csv", header=T)
 # raw<-read.csv("taxonomy_data.csv") ##need the raw data just to get sampling grid and sampling area info
 
@@ -286,7 +288,7 @@ raw[raw$Sample.Code %in% missinggridinfo$Sample.Code,c("Sample.Code","Surface.Ar
 
 ###calculate the proportion of the sampling grid counted
 prop_counted<-subset(raw, select=c(Sample.Code, Sampling.Grid.Squares.Counted, Total.Sampling.Grid.Squares, Surface.Area))
-aggreg<-aggregate(Quantity~Sample.Code+Sampling.Grid.Squares.Counted+Total.Sampling.Grid.Squares+Surface.Area+Surface.Area.Units+Visit.Date, raw, FUN=sum)
+#aggreg<-aggregate(Quantity~Sample.Code+Sampling.Grid.Squares.Counted+Total.Sampling.Grid.Squares+Surface.Area+Surface.Area.Units+Visit.Date, raw, FUN=sum)
 # write.csv(aggreg, "sample_density.csv")
 prop_counted$prop_counted<-prop_counted$Sampling.Grid.Squares.Counted/prop_counted$Total.Sampling.Grid.Squares
 prop_counted<-unique(prop_counted)
@@ -311,13 +313,13 @@ counts<-subset(counts, select=-X)
 counts$OTU_COARSE_Unique<-ifelse(counts$Unique_OTU, paste0(counts$OTU_COARSE, "_UNIQUE"), counts$OTU_COARSE)
 counts<-subset(counts, !is.na(density)) ##remove samples where density could not be calculated because area sampled, or grid count fields not populated
 
-##################DPAC Preparation####
+##################DPAC Preparation####Distribute Parents Among Children
 
 names(counts)
 counts2<-counts[, c(3,2, 1,52,15, 50,17)] ##get just minimum sample data needed: Sample.Code, Visit.ID, Taxon Name, Taxon Name _Unique, Site.Code, density, and Unique 
 counts2[which(duplicated(counts2)),] #make sure no data is duplicated
 
-#counts2<-subset(counts2, Sample.Code=="WAM06600-GLEN01-2010")
+#counts2<-subset(counts2, Sample.Code=="WAM06600-GLEN01-2010") ##this is a good test case for the dpac function
 cast<- reshape2::dcast(counts2, OTU_COARSE+OTU_COARSE_Unique+Unique_OTU~Sample.Code, sum, value.var="density") ##reshape the data to wide format for DPAC
 
 ##add on hierarchical info
@@ -458,6 +460,7 @@ counts<-read.csv("Collapsed_Coarse_Taxa_density.csv")
 lookup<-subset(counts, select=c(Site.Code, Sample.Code,Visit.ID, Project, Stream.or.River, Subbasin, WRIA.Number, Visit.Date, Year, Basin))
 lookup<-unique(lookup)
 
+
 # data<-read.csv("dpac_out.csv", header=T)
 data<-dpac_out
 data<-subset(data, select=c(-X))
@@ -465,8 +468,8 @@ data<-subset(data, Quantity_new!=0)### remove ambiguous taxa that have been re-a
 data[which(duplicated(data[,c(1,2)])),]
 data$OTU_COARSE_Unique<-str_replace(data$OTU_COARSE_Unique, "_UNIQUE", "") ##Remove "_UNIQUE"
 data[which(duplicated(data[,c(1,2)])),]
-excludevisits<-unique(subset(counts, Project=="Regulatory Effectiveness")$Sample.Code) ## remove reg effectiveness samples, since they use three replicates
-data<-subset(data, !ID %in% excludevisits)
+#excludevisits<-unique(subset(counts, Project=="Regulatory Effectiveness")$Sample.Code) ## remove reg effectiveness samples, since they use three replicates
+#data<-subset(data, !ID %in% excludevisits)
 replicates<-unique(subset(raw, QC.Replicate.Of.Sample.Code!="")$Sample.Code)
 excludereplicates<-unique(subset(counts, Sample.Code %in% replicates)$Sample.Code) ### remove all replicates and QC samples
 data<-subset(data, !ID %in% excludereplicates)
@@ -474,7 +477,7 @@ data[which(duplicated(data[,c(1,2)])),]
 
 
 ##We want to analyze trends only for samples with at least 450 organisms to be consistent with B-IBI trend dataset.
-rawcounts<-read.csv("Collapsed_Coarse_Taxa_taxa_trends.csv")
+rawcounts<-read.csv("Collapsed_Coarse_Taxa_for_trends.csv")
 keep<-ddply(rawcounts, .(Sample.Code, Visit.ID), summarize, sumorgs=sum(Quantity_OTU))
 keep<-subset(keep, sumorgs>=450)
 data<-subset(data, ID %in% keep$Sample.Code)
@@ -496,7 +499,7 @@ data[data$ID==fixDUW,"Basin"] <-"Duwamish - Green River Basin" ##Correct SiteID
 data[data$ID==fixDUW,"WRIA.Number"] <-9 ##Correct SiteID
 library(plyr)
 data <- ddply(data, 'Site.Code', mutate, por = length(unique(year))) # add on period of record col
-data<-droplevels(data[data$por > 9,])# look only at sites with >9 years of data
+data<-droplevels(data[data$por > 9,])# look only at sites with >9 years of data ## reconsider whether to move this later in the code after regional trends
 
 
 data[is.na(data)] <- 0
@@ -592,6 +595,7 @@ data_freq3<-data_freq %>% group_by(year) %>% summarise_if(is.numeric, sum) #freq
 names(data_freq3)
 nsamp<-ddply(data, .(year), summarize, nsamp=length(unique(ID)))
 data_freq3<-merge(data_freq3, nsamp, by.x="year", by.y="year")
+detach("package:plyr", unload=T)
 data_freq3<-data_freq3 %>% mutate(across(Acari:Hemerodromiinae, function(x) x/nsamp*100))
 data_freq3<-subset(data_freq3, select=-nsamp)
 
@@ -645,8 +649,9 @@ for (i in 7:ncol(data_freq3)) {
   data.lr$mk.pval<-kendallTrendTest(as.formula(paste0(colnames(data_freq3[i]), " ~ ", "as.numeric(year)")), data=data_freq3)$p.value
   data.lr$mk.inter<-kendallTrendTest(as.formula(paste0(colnames(data_freq3[i]), " ~ ", "as.numeric(year)")), data=data_freq3)$estimate[3]
   data.lr$mk.trend <- as.character(ifelse(data.lr$mk.pval < 0.05 & data.lr$mk.tau < 0, "negative", ifelse(data.lr$mk.pval < 0.05 & data.lr$mk.tau > 0, "positive", "none")))
-  data.lr$samples<-nrow(subset(data_freq3, data_freq3[i]!=0))
-  data.lr$sum.taxon<-sum(subset(data_freq3, data_freq3[i]!=0)[i])
+  data.lr$nyears<-nrow(subset(data_freq3, data_freq3[i]!=0))
+  data.lr$mean.proportion<-mean(subset(data_freq3, data_freq3[i]!=0)[[i]])
+  data.lr$med.proportion<-median(subset(data_freq3, data_freq3[i]!=0)[[i]])
   data.freq_trend2<- rbind(data.lr, data.freq_trend2)
   data.freq_trend2 %>% mutate_if(is.factor, as.character) -> data.freq_trend2
   
@@ -746,11 +751,11 @@ for (var in form) {
   data.lr$inter<-ddply(data_freq_scal, .(get(scal)), summarize, inter= glm(get(paste0(var)) ~ as.numeric(year), family="binomial")$coefficients[1])
   data.lr$pval<-ddply(data_freq_scal, .(get(scal)), summarize, pval= summary(glm(get(paste0(var)) ~ as.numeric(year), family="binomial"))$coefficients[8])
   data.lr$trend <- as.character(ifelse(data.lr$pval$pval < 0.05 & data.lr$slope$slope < 0, "negative", ifelse(data.lr$pval$pval < 0.05 & data.lr$slope$slope > 0, "positive", "none"))) # add trend col
-  data.lr$samples<-ddply(data_freq_scal, .(get(scal)), summarize, samples=length(which(get(var)!=0)))
-  data.lr$sum.taxon<-ddply(data_freq_scal, .(get(scal)), summarize, sum.taxon=sum(get(var)))
+  data.lr$nyears<-ddply(data_freq_scal, .(get(scal)), summarize, samples=length(which(get(var)!=0)))
+  data.lr$nyears2<-ddply(data_freq_scal, .(get(scal)), summarize, sum.taxon=sum(get(var)))
   data.lr<- as.data.frame(data.lr)
   data.lr<-subset(data.lr, select=-c(slope.get.scal., inter.get.scal., pval.get.scal., samples.get.scal., sum.taxon.get.scal.))
-  colnames(data.lr)<-c("taxon","site", "slope", "inter", "pval", "trend", "samples", "sum.taxon")
+  colnames(data.lr)<-c("taxon","site", "slope", "inter", "pval", "trend", "nyears", "nyears2")
   data.lr3<- rbind(data.lr, data.lr3)
   data.lr3 %>% mutate_if(is.factor, as.character) -> data.lr3
   print(var)
