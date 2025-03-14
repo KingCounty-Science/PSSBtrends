@@ -55,7 +55,11 @@ length(unique(raw$Subbasin))
 ####Fix some names to match the translator better
 raw[raw$Taxon=="Lepidotoma-panel case larvae","Taxon"]<-"Lepidostoma-panel case larvae" ###fix this in PSSB
 
-PSSB_taxa<-unique(raw[,c(28, 29, 48:69)])
+colnames(raw) # Comment by Beka: after beth wrote this, new columns are part of the output. Updatating index.
+
+PSSB_taxa<-unique(raw[,c(28, #Taxon.Serial.Number
+                         29, #taxon
+                         50:71)]) #select "Phylum":"Subspecies"
 ##there are some repeat entries that somewhere in the hierarchy have an NA instead of "". This yields multiples of the same taxa. Fix this.
 PSSB_taxa[is.na(PSSB_taxa)]<-""
 PSSB_taxa<-unique(PSSB_taxa) #we're generating a list of all taxa in PSSB samples
@@ -279,8 +283,8 @@ OTU_collapsed3<-OTU_collapsed3[,c(1:43)]
 
 
 
-write.csv(OTU_collapsed3, "Collapsed_Coarse_Taxa.csv")
-OTU_collapsed3<-read.csv( "Collapsed_Coarse_Taxa.csv")
+write.csv(OTU_collapsed3, "Collapsed_Coarse_Taxa_20250313.csv")
+OTU_collapsed3<-read.csv( "Collapsed_Coarse_Taxa_20250313.csv")
 
 
 ###Subsampling####
