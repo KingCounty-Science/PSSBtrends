@@ -23,8 +23,8 @@ getwd()
 
 
 atts<-read.xlsx("./Inputs/2012_taxa_attributes.xlsx")
-lookup<-read.csv("./Inputs/ORWA_TaxaTranslator_20240417.csv")##update this to latest translator table.
-BCG_atts<-read.csv("./Inputs/ORWA_Attributes_20240417.csv")#load the BCG taxonomic hierarchy
+lookup<-read.csv("./Inputs/ORWA_TaxaTranslator_20250211b.csv")##update this to latest translator table.
+BCG_atts<-read.csv("./Inputs/ORWA_Attributes_20250211.csv")#load the BCG taxonomic hierarchy
 
 ##This function takes the raw taxa data .txt output from PSSB and binds it all into one data object
 taxaBind <- function(file.path) {
@@ -69,7 +69,11 @@ PSSB_taxa[which(duplicated(PSSB_taxa$Taxon)),] ### two entries in PSSB-- fix thi
 PSSB_taxa<-subset(PSSB_taxa, Taxon.Serial.Number !="-40")
 
 ####merge the translator lookup with the raw data, rename OTU_MetricCalc, and look for any taxa missing a translation
-OTU<-merge(raw, subset(lookup, select=c(Taxon, OTU_MetricCalc, NonTarget)), by.x="Taxon", by.y="Taxon", all.x=T)
+OTU<-merge(raw, 
+           subset(lookup, select=c(Taxon_orig, OTU_MetricCalc)), 
+           by.x="Taxon", 
+           by.y="Taxon_orig", 
+           all.x=T)
 OTU[which(is.na(OTU$OTU_MetricCalc)),]
 colnames(OTU)[ncol(OTU)-1]<-"OTU"
 missing<-unique(OTU[which(is.na(OTU$OTU)), "Taxon"])## screening step to see if any taxa aren't mapped
