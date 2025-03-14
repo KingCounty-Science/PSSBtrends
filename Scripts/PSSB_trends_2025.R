@@ -28,6 +28,11 @@ atts<-read.xlsx("./Inputs/2012_taxa_attributes.xlsx")
 lookup<-read.csv("./Inputs/ORWA_TaxaTranslator_20250211b.csv")##update this to latest translator table.
 BCG_atts<-read.csv("./Inputs/ORWA_Attributes_20250211.csv")#load the BCG taxonomic hierarchy
 
+#create empty folder for graphs and csvs
+output_folder <- paste0("output",Sys.Date()) 
+dir.create(output_folder)
+
+
 ##This function takes the raw taxa data .txt output from PSSB and binds it all into one data object
 taxaBind <- function(file.path) {
 
@@ -292,8 +297,8 @@ OTU_collapsed3<-OTU_collapsed3[,c(1:43)]
 
 
 
-write.csv(OTU_collapsed3, "Collapsed_Coarse_Taxa_20250313.csv")
-OTU_collapsed3<-read.csv( "Collapsed_Coarse_Taxa_20250313.csv")
+write.csv(OTU_collapsed3, paste0(output_folder,"/Collapsed_Coarse_Taxa.csv"))
+OTU_collapsed3<-read.csv(paste0(output_folder,"/Collapsed_Coarse_Taxa.csv"))
 
 
 ###Subsampling####
@@ -410,7 +415,8 @@ KC_results<-left_join(KC_results, unique(subset(KC_rarified, select=c("Visit.ID"
 
 KC_results<-left_join(KC_results, unique(subset(raw, select=c(Visit.ID, Latitude, Longitude))), by="Visit.ID")
 
-write.csv(KC_results, "B-IBI_results_PSSB_Scores_20250313.csv")
+write.csv(KC_results, paste0(output_folder,"/B-IBI_results_PSSB_Scores.csv"))
+
 
 
 ####Trends####
@@ -429,7 +435,7 @@ library(tidyverse)
 ####note: we've changed subsampling number to 450 and removed samples with total abundance <450 for greater statistical consistency in richness between samples over time
 bibi<-KC_results
 unique(bibi$Site.Code)
-bibi <-read.csv("B-IBI_results_PSSB_Scores_20250313.csv")
+bibi <-read.csv(paste0(output_folder,"/B-IBI_results_PSSB_Scores.csv"))
 bibi<-subset(bibi, Tot_Abund>=450)
 unique(bibi$Site.Code)
 
@@ -504,7 +510,7 @@ for (each in metrics) {
 
 overall_trends<-unique(bibi.lr1[(ncol(bibi.lr)+2):(ncol(bibi.lr1))])
 overall_trends = as.matrix(overall_trends)
-write.csv(overall_trends,"RKT_overall_trends_PSSB_20250313.csv")
+write.csv(overall_trends, paste0(output_folder,"/RKT_overall_trends_PSSB.csv"))
 trend<-subset(overall_trends, select=c(str_subset(colnames(overall_trends), "RKTtrend_")))
 
 ##plot the trends for each metric
@@ -514,7 +520,7 @@ for (i in 5:15) {
   o<-ggplot(bibi.lr1, aes(as.factor(Year), bibi.lr1[,i]))+geom_boxplot()+labs(y=ylabel)#+geom_abline(aes(intercept=get(paste0("MKinter_",names(bibi.lr1[i]))),slope=get(paste0("MKSlope_",names(bibi.lr1[i])))))
   # print(p)
   print(o)
-  ggsave(paste0("metrics_boxplots_", ylabel, "PSSB.png"), plot = o, width=20, height=10)
+  ggsave(paste0(output_folder,"/metrics_boxplots_", ylabel, "PSSB.png"), plot = o, width=20, height=10)
 }
 
 
@@ -558,14 +564,14 @@ overall_trends<-unique(subset(overall_trends, select=c("Subbasin" ,str_subset(co
 
 
 
-write.csv(overall_trends, "Subbasin_RKTtrends_PSSB_20250313.csv")
+write.csv(overall_trends, paste0(output_folder,"/Subbasin_RKTtrends_PSSB.csv"))
 
 
 bibi_sum<-ddply(bibi.lr2, "Subbasin", summarise, mean_Overall.Score=mean(Overall.Score), SD_overallscore=sd(Overall.Score), SE_overallscore=sd(Overall.Score)/sqrt(length(Overall.Score)), len=length(Overall.Score), RKT_trend=unique(RKTtrend_Overall.Score), Avg_RKTSlope_Overall.Score=mean(RKTSlope_Overall.Score), Avg_RKTtau_Overall.Score=mean(RKTtau_Overall.Score), Avg_RKTpval_Overall.Score=mean(RKTpval_Overall.Score), sites=length(unique(Site.Code)), min=min(Overall.Score), max=max(Overall.Score), med=median(Overall.Score))
-write.csv(bibi_sum,"score_RKTtrend_summarized_by_subbasin_PSSB_20250313.csv")
+write.csv(bibi_sum, paste0(output_folder,"/score_RKTtrend_summarized_by_subbasin_PSSB.csv"))
 
 pp<-ggplot(bibi.lr2, aes(Year, Overall.Score, group=Year))+geom_boxplot(aes(fill=RKTtrend_Overall.Score))+facet_wrap(~Subbasin, ncol=4)+labs(y="B-IBI Score", x="Year")+ theme(axis.text.x = element_text(angle = 90))
-ggsave(paste0("SubbasinRKTtrend_PSSB_20250313.png"), plot = pp, width=20, height=10)
+ggsave(paste0(output_folder,"/SubbasinRKTtrend_PSSB.png"), plot = pp, width=20, height=10)
 
 
 
@@ -610,14 +616,14 @@ overall_trends<-unique(subset(overall_trends, select=c("WRIA.Number" ,str_subset
 
 
 
-write.csv(overall_trends, "Trend_watershed_RKTtrends_PSSB_20250313.csv")
+write.csv(overall_trends, paste0(output_folder,"/Trend_watershed_RKTtrends_PSSB.csv"))
 
 
 bibi_sum<-ddply(bibi.lr2, "WRIA.Number", summarise, mean_Overall.Score=mean(Overall.Score), SD_overallscore=sd(Overall.Score), SE_overallscore=sd(Overall.Score)/sqrt(length(Overall.Score)), len=length(Overall.Score), RKT_trend=unique(RKTtrend_Overall.Score), Avg_RKTSlope_Overall.Score=mean(RKTSlope_Overall.Score), Avg_RKTtau_Overall.Score=mean(RKTtau_Overall.Score), Avg_RKTpval_Overall.Score=mean(RKTpval_Overall.Score), sites=length(unique(Site.Code)), min=min(Overall.Score), max=max(Overall.Score), med=median(Overall.Score))
-write.csv(bibi_sum,"score_RKTtrend_summarized_by_watershed_PSSB_20250313.csv")
+write.csv(bibi_sum, paste0(output_folder,"/score_RKTtrend_summarized_by_watershed_PSSB.csv"))
 
 pp<-ggplot(bibi.lr2, aes(Year, Overall.Score, group=Year))+geom_boxplot(aes(fill=RKTtrend_Overall.Score))+facet_wrap(~WRIA.Number, ncol=4)+labs(y="B-IBI Score", x="Year")+ theme(axis.text.x = element_text(angle = 90))
-ggsave(paste0("WatershedRKTtrend_PSSB_20250313.png"), plot = pp, width=20, height=10)
+ggsave(paste0(output_folder,"/WatershedRKTtrend_PSSB.png"), plot = pp, width=20, height=10)
 
 
 
@@ -704,10 +710,10 @@ names(bibi)
 overall_trends<-unique(bibi[c(2:3,19:(ncol(bibi)))])
 
 # overall_trends<-unique(subset(overall_trends, select=c("Site.Code" , "Subbasin", "Stream.or.River", str_subset(colnames(overall_trends), "MKtau"), str_subset(colnames(overall_trends), "MKpval"),str_subset(colnames(overall_trends), "MKtrend"))))
-write.csv(overall_trends,"Site_Trends_coarse_PSSB_20250313.csv")
+write.csv(overall_trends, paste0(output_folder,"/Site_Trends_coarse_PSSB.csv"))
 
 bibi_sum_site<-ddply(bibi, "Site.Code", summarise, mean_Overall.Score=mean(Overall.Score), SD_overallscore=sd(Overall.Score), SE_overallscore=sd(Overall.Score)/sqrt(length(Overall.Score)), len=length(Overall.Score), MK_trend=unique(MKtrend_Overall.Score), Avg_MKSlope_Overall.Score=mean(MKSlope_Overall.Score), Avg_MKtau_Overall.Score=mean(MKtau_Overall.Score), Avg_MKpval_Overall.Score=mean(MKpval_Overall.Score), sites=length(unique(Site.Code)), min=min(Overall.Score), max=max(Overall.Score), med=median(Overall.Score))
-write.csv(bibi_sum_site,"score_RKTtrend_summarized_by_site_PSSB_20250313.csv")
+write.csv(bibi_sum_site,paste0(output_folder,"/score_RKTtrend_summarized_by_site_PSSB.csv"))
 
 sum(bibi_sum_site$len)
 
@@ -761,7 +767,7 @@ pp<-pp+geom_abline(aes(intercept=get(paste0("MKinter_",str_split(var, "_", n=2)[
 # }
 print(pp)
 # }
-ggsave(paste0("OverallScores_Sites_PSSB_20250313.png"), plot = pp, width=20, height=10)
+ggsave(paste0(output_folder,"/OverallScores_Sites_PSSB.png"), plot = pp, width=20, height=10)
 
 
 ggplot(bibi, aes(x=Year, y=Overall.Score))+  geom_rect(xmin=2001, xmax=2022, ymin=0, ymax=20, fill="firebrick1", color="black")+
@@ -775,5 +781,5 @@ ggplot(bibi, aes(x=Year, y=Overall.Score))+  geom_rect(xmin=2001, xmax=2022, ymi
   facet_wrap(~Site.Code)+geom_point( aes(shape = c(shapes))) + scale_shape_identity()+labs(y="Overall B-IBI Score")
 
 
-ggsave("SiteScores_PSSB_20250313.png", width=20, height=10)
+ggsave(paste0(output_folder,"/SiteScores_PSSB.png"), width=20, height=10)
 
