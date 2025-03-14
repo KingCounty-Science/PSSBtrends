@@ -7,6 +7,8 @@
 ##The PSSB subsampling routine is semi-nonrandom to favor inclusion of unique taxa.
 ##The subsampling routine used here is fully random.
 
+## March 2025: Beka is updating the script to accommodate changes to the structure of the taxa translator table and attributes table coming from the BCG work group materials.
+
 
 ##The code then goes on to score the samples using the Coarse STE-based calculations (though this is also easily adjusted to Fine).
 
@@ -75,7 +77,7 @@ OTU<-merge(raw,
            by.y="Taxon_orig", 
            all.x=T)
 OTU[which(is.na(OTU$OTU_MetricCalc)),]
-colnames(OTU)[ncol(OTU)-1]<-"OTU"
+colnames(OTU)[colnames(OTU) == "OTU_MetricCalc"] <- "OTU" #rename the OTU_MetricCalc column to just be OTU 
 missing<-unique(OTU[which(is.na(OTU$OTU)), "Taxon"])## screening step to see if any taxa aren't mapped
 
 ######Prepare the data####
@@ -87,7 +89,7 @@ OTU<-subset(OTU, is.na(QC.Replicate.Of.Sample.Code)|QC.Replicate.Of.Sample.Code=
 OTU[which(OTU$OTU=="DNI"),"OTU"]<-OTU[which(OTU$OTU=="DNI"),"Taxon"]###These are marked as "DNI" in BCG translation table, but they aren't on B-IBI exclusion list. Adding back in for now.
 OTU[which(is.na(OTU$OTU)),"OTU"]<-OTU[which(is.na(OTU$OTU)),"Taxon"]###These are taxa without a translation in BCG translation table. Adding back in as-is for now.
 
-OTU$Unique<-as.logical(OTU$Unique)
+OTU$Unique<-as.logical(OTU$Unique) #changes it from character T/F to logical T/F
 
 ##collapse to Visit.ID, because 1998-2015 samples were often three reps of 3 sq ft with different sample names for each rep
 OTU_collapsed<-ddply(OTU, .(Visit.ID, OTU, WRIA.Number, Agency, Basin, Subbasin, Stream.or.River, Project, Visit.Date, Year, Latitude, Longitude, Lab.Name, Site.Code), summarize, Quantity_OTU = sum(Quantity), Unique_OTU=any(Unique))
@@ -98,8 +100,10 @@ OTU_collapsed$Visit.Date<-as.Date(OTU_collapsed$Visit.Date, "%Y-%m-%d")
 ########Create lookup table for taxa hierarchy.
 #we need to  get the BCG hierarchy and the PSSB taxa hierarchy in the same format and combine them
 names(BCG_atts)
-names(BCG_atts[,c(1, 22,24:40)])
-hierarchy<-BCG_atts[,c(1, 22,24:40)]
+names(BCG_atts[,c(2, #"Taxon" 
+                  25, #"TSN"
+                  27:43)])# "Phylum":"Species"
+hierarchy<-BCG_atts[,c(2, 25,27:43)]
 names(PSSB_taxa)
 names(hierarchy)
 ##the BCG hierarchy isn't the same as PSSB. Need to consolidate some levels into Species Group, then rename columns
@@ -117,6 +121,7 @@ hierarchy$Subspecies<-NA
 names(PSSB_taxa)
 names(hierarchy)
 names(hierarchy[,c(2,1, 3, 4, 20, 5:6,21,22,  7:8, 23,9:10, 11,24, 12,13,25,14,16, 15,19, 26)])
+
 hierarchy<-hierarchy[,c(2,1, 3, 4, 20, 5:6,21,22,  7:8, 23,9:10, 11,24, 12,13,25,14,16, 15,19, 26)]
 
 names(hierarchy)<-names(PSSB_taxa)
@@ -653,7 +658,7 @@ scores<-ggplot(bibi )+
   geom_point(data=meanscores, mapping=aes(x=as.numeric(paste0(Year)), y=meanScore))+
   geom_smooth(data=meanscores, mapping=aes(x=as.numeric(paste0(Year)), y=meanScore), method="lm",se=F)+
   labs(y="Overall Score", x="Year")+ theme(text = element_text(size = 28))+
-  geom_quantile(data=bibi, mapping=aes(x=as.numeric(paste0(Year)), y=Overall.Score), quantiles=.5, color="red", size=1)#+
+  geom_quantile(data=bibi, mapping=aes(x=as.numeric(paste0(Year)), y=Overall.Score), quantiles=.5, color="red", linewidth = 1)#+
 # geom_abline(slope=0.48, intercept = -914.2032, color="red", lwd=1)##adding Sen-Theil line and intercept calculated above
 
 
