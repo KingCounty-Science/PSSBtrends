@@ -41,17 +41,12 @@ taxaBind <- function(file.path) {
 file.path="./Inputs/taxonomy_data/"
 raw<-taxaBind(file.path)
 
-##Iswaeon is entered as a species in PSSB, but this is really a genus.
-raw[raw$Taxon=="Iswaeon","Genus"]<-"Iswaeon"
-raw[raw$Taxon=="Iswaeon","Species"]<-""
-
 length(unique(raw$Project))
 length(unique(raw$Agency))
 length(unique(raw$Site.Code))
 length(unique(raw$WRIA.Number))
 length(unique(raw$Stream.or.River))
 length(unique(raw$Subbasin))
-
 ###Kate has identified what sites she wants to run trends on. This subsets the taxa data to just those sites
 # site<-read.xlsx("./Inputs/ScoresByYear_all streams and rivers default selection.xlsx", detectDates = T, sheet="NEW - sites for trends")
 # raw2<-subset(raw, Site.Code %in% site$Site.Code)
@@ -90,7 +85,10 @@ OTU[which(is.na(OTU$OTU)),"OTU"]<-OTU[which(is.na(OTU$OTU)),"Taxon"]###These are
 
 OTU$Unique<-as.logical(OTU$Unique)
 
+##collapse to Visit.ID, because 1998-2015 samples were often three reps of 3 sq ft with different sample names for each rep
+OTU_collapsed<-ddply(OTU, .(Visit.ID, OTU, WRIA.Number, Agency, Basin, Subbasin, Stream.or.River, Project, Visit.Date, Year, Latitude, Longitude, Lab.Name, Site.Code), summarize, Quantity_OTU = sum(Quantity), Unique_OTU=any(Unique))
 
+OTU_collapsed$Visit.Date<-as.Date(OTU_collapsed$Visit.Date, "%Y-%m-%d")
 
 ######Add correct Taxonomic Hierarchy####
 ########Create lookup table for taxa hierarchy.
@@ -171,10 +169,10 @@ for (j in 1:nrow(coarse_rules)){
 KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==""),"OTU_COARSE"]<-KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==""),"OTU"]
 
 KC_taxa_coarse[is.na(KC_taxa_coarse)]<-""
-# ##For fine STE, need to adjust species names in OTU column so that they include genus
-# KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Species),"OTU_COARSE"]<-paste0(KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Species),"Genus"]," ", KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Species),"Species"])
-# ##For fine STE, need to adjust subgenus names in OTU column so that they include genus
-# KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Subgenus),"OTU_COARSE"]<-paste0(KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Subgenus),"Genus"]," (", KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Subgenus),"Subgenus"], ")")
+##For fine STE, need to adjust species names in OTU column so that they include genus
+KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Species),"OTU_COARSE"]<-paste0(KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Species),"Genus"]," ", KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Species),"Species"])
+##For fine STE, need to adjust subgenus names in OTU column so that they include genus
+KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Subgenus),"OTU_COARSE"]<-paste0(KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Subgenus),"Genus"]," (", KC_taxa_coarse[which(KC_taxa_coarse$OTU_COARSE==KC_taxa_coarse$Subgenus),"Subgenus"], ")")
 
 library(plyr)
 OTU_collapsed2<-ddply(KC_taxa_coarse, .(Visit.ID, OTU_COARSE,Agency, WRIA.Number, Basin, 
@@ -403,7 +401,7 @@ KC_results<-left_join(KC_results, unique(subset(KC_rarified, select=c("Visit.ID"
 
 KC_results<-left_join(KC_results, unique(subset(raw, select=c(Visit.ID, Latitude, Longitude))), by="Visit.ID")
 
-write.csv(KC_results, "B-IBI_results_PSSB_Scores.csv")
+write.csv(KC_results, "B-IBI_results_PSSB_Scores_20250313.csv")
 
 
 ####Trends####
@@ -422,10 +420,8 @@ library(tidyverse)
 ####note: we've changed subsampling number to 450 and removed samples with total abundance <450 for greater statistical consistency in richness between samples over time
 bibi<-KC_results
 unique(bibi$Site.Code)
-bibi <-read.csv("B-IBI_results_PSSB_Scores.csv")
+bibi <-read.csv("B-IBI_results_PSSB_Scores_20250313.csv")
 bibi<-subset(bibi, Tot_Abund>=450)
-bibi<-subset(bibi, Agency=="King County - DNRP")
-bibi<-subset(bibi, Year>2001)
 unique(bibi$Site.Code)
 
 #########  Format, remove data from wrong months, average scores from samples with same site+year, and subset B-IBI data to data since 2001 with more than 9 years of data
@@ -435,15 +431,7 @@ bibi$sampnum <- paste(bibi$Trend_station, format(as.Date(bibi$Visit.Date, '%Y-%m
 bibi <- droplevels(bibi[bibi$month %in% c('07', '08', '09', '10'),]) # exclude samples collected outside of July - Oct
 dups<-bibi[duplicated(bibi[,c("Project" , "WRIA.Number"  , "Basin" , "Subbasin" , "Stream.or.River" , "Site.Code", "Year")]),]
 
-
-##re-write this to not drop rows where WRIA is NA
-#bibi <-aggregate(cbind( Overall.Score, Tot_Richness_Score, E_Richness_Score, P_Richness_Score, T_Richness_Score, Cling_Richness_Score, LL_Richness_Score, Intol_Richness_Score, Dom_Percent_Score,  Pred_Percent_Score, Tol_Percent_Score) ~   Site.Code + Subbasin +WRIA.Number+ Year, data = bibi, FUN = "mean", na.action = na.exclude)
-
-detach("package:plyr", unload=TRUE)
-
-bibi<-bibi %>% group_by(Site.Code, Subbasin, WRIA.Number, Year) %>% summarize(Overall.Score= mean(Overall.Score), Tot_Richness_Score=mean(Tot_Richness_Score), E_Richness_Score=mean(E_Richness_Score), P_Richness_Score=mean(P_Richness_Score), T_Richness_Score=mean(T_Richness_Score), Cling_Richness_Score=mean(Cling_Richness_Score), LL_Richness_Score=mean(LL_Richness_Score), Intol_Richness_Score=mean(Intol_Richness_Score), Dom_Percent_Score=mean(Dom_Percent_Score), Pred_Percent_Score=mean(Pred_Percent_Score), Tol_Percent_Score=mean(Tol_Percent_Score))
-
-
+bibi <-aggregate(cbind( Overall.Score, Tot_Richness_Score, E_Richness_Score, P_Richness_Score, T_Richness_Score, Cling_Richness_Score, LL_Richness_Score, Intol_Richness_Score, Dom_Percent_Score,  Pred_Percent_Score, Tol_Percent_Score) ~   Site.Code + Subbasin +WRIA.Number+ Year, data = bibi, FUN = "mean", na.action = na.exclude)
 
 bibi.lr<-bibi
 bibi.lr1<-bibi.lr
@@ -456,7 +444,6 @@ ggplot(bibi.lr, aes(x=Year, y=Overall.Score))+geom_smooth(se=F)+theme(legend.pos
 
 
 library(ggpmisc)
-library(plyr)
 
 meanscores<-ddply(bibi.lr1, .(Year), summarize, meanScore=mean(Overall.Score), nyears=length(unique(Site.Code)), sd=sd(Overall.Score), min=min(Overall.Score), max=max(Overall.Score), median=median(Overall.Score))
 meanscore<-ggplot(meanscores, aes(x=Year, y=meanScore))+geom_smooth(method="lm",se=F)+theme(legend.position = "none")+
@@ -508,7 +495,7 @@ for (each in metrics) {
 
 overall_trends<-unique(bibi.lr1[(ncol(bibi.lr)+2):(ncol(bibi.lr1))])
 overall_trends = as.matrix(overall_trends)
-write.csv(overall_trends,"RKT_overall_trends_PSSB.csv")
+write.csv(overall_trends,"RKT_overall_trends_PSSB_20250313.csv")
 trend<-subset(overall_trends, select=c(str_subset(colnames(overall_trends), "RKTtrend_")))
 
 ##plot the trends for each metric
@@ -562,14 +549,14 @@ overall_trends<-unique(subset(overall_trends, select=c("Subbasin" ,str_subset(co
 
 
 
-write.csv(overall_trends, "Subbasin_RKTtrends_PSSB.csv")
+write.csv(overall_trends, "Subbasin_RKTtrends_PSSB_20250313.csv")
 
 
 bibi_sum<-ddply(bibi.lr2, "Subbasin", summarise, mean_Overall.Score=mean(Overall.Score), SD_overallscore=sd(Overall.Score), SE_overallscore=sd(Overall.Score)/sqrt(length(Overall.Score)), len=length(Overall.Score), RKT_trend=unique(RKTtrend_Overall.Score), Avg_RKTSlope_Overall.Score=mean(RKTSlope_Overall.Score), Avg_RKTtau_Overall.Score=mean(RKTtau_Overall.Score), Avg_RKTpval_Overall.Score=mean(RKTpval_Overall.Score), sites=length(unique(Site.Code)), min=min(Overall.Score), max=max(Overall.Score), med=median(Overall.Score))
-write.csv(bibi_sum,"score_RKTtrend_summarized_by_subbasin_PSSB.csv")
+write.csv(bibi_sum,"score_RKTtrend_summarized_by_subbasin_PSSB_20250313.csv")
 
 pp<-ggplot(bibi.lr2, aes(Year, Overall.Score, group=Year))+geom_boxplot(aes(fill=RKTtrend_Overall.Score))+facet_wrap(~Subbasin, ncol=4)+labs(y="B-IBI Score", x="Year")+ theme(axis.text.x = element_text(angle = 90))
-ggsave(paste0("SubbasinRKTtrend_PSSB.png"), plot = pp, width=20, height=10)
+ggsave(paste0("SubbasinRKTtrend_PSSB_20250313.png"), plot = pp, width=20, height=10)
 
 
 
@@ -614,14 +601,14 @@ overall_trends<-unique(subset(overall_trends, select=c("WRIA.Number" ,str_subset
 
 
 
-write.csv(overall_trends, "Trend_watershed_RKTtrends_PSSB.csv")
+write.csv(overall_trends, "Trend_watershed_RKTtrends_PSSB_20250313.csv")
 
 
 bibi_sum<-ddply(bibi.lr2, "WRIA.Number", summarise, mean_Overall.Score=mean(Overall.Score), SD_overallscore=sd(Overall.Score), SE_overallscore=sd(Overall.Score)/sqrt(length(Overall.Score)), len=length(Overall.Score), RKT_trend=unique(RKTtrend_Overall.Score), Avg_RKTSlope_Overall.Score=mean(RKTSlope_Overall.Score), Avg_RKTtau_Overall.Score=mean(RKTtau_Overall.Score), Avg_RKTpval_Overall.Score=mean(RKTpval_Overall.Score), sites=length(unique(Site.Code)), min=min(Overall.Score), max=max(Overall.Score), med=median(Overall.Score))
-write.csv(bibi_sum,"score_RKTtrend_summarized_by_watershed_PSSB.csv")
+write.csv(bibi_sum,"score_RKTtrend_summarized_by_watershed_PSSB_20250313.csv")
 
 pp<-ggplot(bibi.lr2, aes(Year, Overall.Score, group=Year))+geom_boxplot(aes(fill=RKTtrend_Overall.Score))+facet_wrap(~WRIA.Number, ncol=4)+labs(y="B-IBI Score", x="Year")+ theme(axis.text.x = element_text(angle = 90))
-ggsave(paste0("WatershedRKTtrend_PSSB.png"), plot = pp, width=20, height=10)
+ggsave(paste0("WatershedRKTtrend_PSSB_20250313.png"), plot = pp, width=20, height=10)
 
 
 
@@ -708,10 +695,10 @@ names(bibi)
 overall_trends<-unique(bibi[c(2:3,19:(ncol(bibi)))])
 
 # overall_trends<-unique(subset(overall_trends, select=c("Site.Code" , "Subbasin", "Stream.or.River", str_subset(colnames(overall_trends), "MKtau"), str_subset(colnames(overall_trends), "MKpval"),str_subset(colnames(overall_trends), "MKtrend"))))
-write.csv(overall_trends,"Site_Trends_coarse_PSSB.csv")
+write.csv(overall_trends,"Site_Trends_coarse_PSSB_20250313.csv")
 
 bibi_sum_site<-ddply(bibi, "Site.Code", summarise, mean_Overall.Score=mean(Overall.Score), SD_overallscore=sd(Overall.Score), SE_overallscore=sd(Overall.Score)/sqrt(length(Overall.Score)), len=length(Overall.Score), MK_trend=unique(MKtrend_Overall.Score), Avg_MKSlope_Overall.Score=mean(MKSlope_Overall.Score), Avg_MKtau_Overall.Score=mean(MKtau_Overall.Score), Avg_MKpval_Overall.Score=mean(MKpval_Overall.Score), sites=length(unique(Site.Code)), min=min(Overall.Score), max=max(Overall.Score), med=median(Overall.Score))
-write.csv(bibi_sum_site,"score_RKTtrend_summarized_by_site_PSSB.csv")
+write.csv(bibi_sum_site,"score_RKTtrend_summarized_by_site_PSSB_20250313.csv")
 
 sum(bibi_sum_site$len)
 
@@ -765,7 +752,7 @@ pp<-pp+geom_abline(aes(intercept=get(paste0("MKinter_",str_split(var, "_", n=2)[
 # }
 print(pp)
 # }
-ggsave(paste0("OverallScores_Sites_PSSB.png"), plot = pp, width=20, height=10)
+ggsave(paste0("OverallScores_Sites_PSSB_20250313.png"), plot = pp, width=20, height=10)
 
 
 ggplot(bibi, aes(x=Year, y=Overall.Score))+  geom_rect(xmin=2001, xmax=2022, ymin=0, ymax=20, fill="firebrick1", color="black")+
@@ -779,4 +766,5 @@ ggplot(bibi, aes(x=Year, y=Overall.Score))+  geom_rect(xmin=2001, xmax=2022, ymi
   facet_wrap(~Site.Code)+geom_point( aes(shape = c(shapes))) + scale_shape_identity()+labs(y="Overall B-IBI Score")
 
 
-ggsave("SiteScores_PSSB.png", width=20, height=10)
+ggsave("SiteScores_PSSB_20250313.png", width=20, height=10)
+
