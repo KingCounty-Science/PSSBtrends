@@ -55,7 +55,7 @@ long_df <-df_sa |>
 #what are the range of dates?
 range(long_df$year) 
 
-# "Complete" the data, fill in count = 0 for agencies who didn't have observations.
+# "Complete" the data, fill in count = 0 for agencies who don't have observations
 final_dat <- long_df %>%
   complete(Agency, year = 1994:2023, fill = list(count = 0)) %>%
   group_by(Agency) %>%
