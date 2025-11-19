@@ -47,7 +47,7 @@ taxaBind <- function(file.path) {
 
 }
 
-file.path="./Inputs/taxonomy_data/"
+file.path="./Inputs/taxonomy_data_2024/"
 raw<-taxaBind(file.path)
 
 length(unique(raw$Project))
