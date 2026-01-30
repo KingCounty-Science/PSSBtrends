@@ -17,6 +17,7 @@
 ##Finally, the code runs through trends analysis at multiple spatial scales: REgional, subbasin, WRIA and site level trends.
 
 ###Raw Data Processing####
+library(Microsoft365R)
 library(plyr)
 library(openxlsx)
 library(lubridate)
@@ -25,6 +26,15 @@ library(tidyverse)
 library(dplyr)
 getwd()
 
+##read in the dataset Kate sent for comparison (2026-01-2029)
+#### Load ISP site pebble data from Microsoft Teams/Sharepoint ####
+site <- get_sharepoint_site(site_url = [saved in local environment])
+
+# default is the document library
+drv <- site$get_drive("LSSG Files")
+
+# This downloads the file to the project folder (I had to know the pathway from Teams/Sharepoint)
+drv$download_file("Freshwater/Streams/Freshwater Macroinvertebrate Program/Contracts/Seattle_bugs/2025_Report_Status_2020-2024/PSSB_download_fourways_2002_2024.xlsx")
 
 atts<-read.xlsx("./Inputs/2012_taxa_attributes.xlsx")
 lookup<-read.csv("./Inputs/ORWA_TaxaTranslator_20250211b.csv")##update this to latest translator table.
@@ -112,6 +122,10 @@ OTU_collapsed$Visit.Date<-as.Date(OTU_collapsed$Visit.Date, "%Y-%m-%d")
 ########Create lookup table for taxa hierarchy.
 #we need to  get the BCG hierarchy and the PSSB taxa hierarchy in the same format and combine them
 names(BCG_atts)
+names(BCG_atts[,c(2, #"Taxon" 
+                  25, #"TSN"
+                  27:43)])# "Phylum":"Species"
+
 names(BCG_atts[,c(2, #"Taxon" 
                   25, #"TSN"
                   27:43)])# "Phylum":"Species"
