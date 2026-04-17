@@ -17,7 +17,9 @@
 ##Finally, the code runs through trends analysis at multiple spatial scales: REgional, subbasin, WRIA and site level trends.
 
 ###Raw Data Processing####
-library(Microsoft365R)
+library(Microsoft365R) #for connecting to SharePoint
+library(readxl) #for reading excel file
+library(janitor) #for cleaning names
 library(plyr)
 library(openxlsx)
 library(lubridate)
@@ -28,13 +30,25 @@ getwd()
 
 ##read in the dataset Kate sent for comparison (2026-01-2029)
 #### Load ISP site pebble data from Microsoft Teams/Sharepoint ####
-site <- get_sharepoint_site(site_url = [saved in local environment])
+site <- get_sharepoint_site(site_url = "[saved in local environment]") #this project is public
 
 # default is the document library
 drv <- site$get_drive("LSSG Files")
 
 # This downloads the file to the project folder (I had to know the pathway from Teams/Sharepoint)
 drv$download_file("Freshwater/Streams/Freshwater Macroinvertebrate Program/Contracts/Seattle_bugs/2025_Report_Status_2020-2024/PSSB_download_fourways_2002_2024.xlsx")
+
+# Review the sheet names in order to select the correct one.  
+excel_sheets("PSSB_download_fourways_2002_2024.xlsx")
+
+# Read in the data,Just pebble and canopy (may change in the future)
+PSSB_4ways <-read_excel("PSSB_download_fourways_2002_2024.xlsx", 
+                       sheet = "DATA_USE", 
+                       .name_repair = make_clean_names) # skips the first line which does NOT contain data
+
+# Removes the file from my working directory. 
+file.remove("PSSB_download_fourways_2002_2024.xlsx")
+
 
 atts<-read.xlsx("./Inputs/2012_taxa_attributes.xlsx")
 lookup<-read.csv("./Inputs/ORWA_TaxaTranslator_20250211b.csv")##update this to latest translator table.
@@ -57,7 +71,11 @@ taxaBind <- function(file.path) {
 
 }
 
-file.path="./Inputs/taxonomy_data_2024/"
+#Get all data from PSSB ->
+#All streams and Rivers, date range TA and Taxonomy
+
+
+file.path="./Inputs/taxonomy_data_2026-02-03/"
 raw<-taxaBind(file.path)
 
 length(unique(raw$Project))
@@ -70,6 +88,25 @@ length(unique(raw$Subbasin))
 # site<-read.xlsx("./Inputs/ScoresByYear_all streams and rivers default selection.xlsx", detectDates = T, sheet="NEW - sites for trends")
 # raw2<-subset(raw, Site.Code %in% site$Site.Code)
 
+#Compare the size of this data set to the data kate provided.
+PSSB_4ways |> select(project) |> unique()
+PSSB_4ways |> select(agency) |> unique()
+PSSB_4ways |> select(site_code) |> unique()
+PSSB_4ways |> select(wria_number) |> unique()
+PSSB_4ways |> select(stream) |> unique()
+PSSB_4ways |> select(subbasin) |> unique()
+PSSB_4ways |> select(visit_id) |> n_distinct()
+
+## KAte is only interested in the Seattle trends sites. I will filter the large pssb download to just the visit ids?
+
+visitIDs <-PSSB_4ways |> select(visit_id) |> pull()
+
+raw_seattle <-raw |> filter(Visit.ID %in% visitIDs)
+raw_seattle |> select(Visit.ID) |> n_distinct()
+
+write.csv(raw_seattle,"raw-taxa-data_visitID-matches-Kate-list_2026-02-03.csv")
+#naming it raw in order to not need to revise the script.
+raw <- raw_seattle
 #####Taxa Mapping####
 ####Fix some names to match the translator better
 raw[raw$Taxon=="Lepidotoma-panel case larvae","Taxon"]<-"Lepidostoma-panel case larvae" ###fix this in PSSB
