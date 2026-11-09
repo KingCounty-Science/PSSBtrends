@@ -121,7 +121,19 @@ names(bibi)
 
 bibi_means <- aggregate(cbind(overall_score, taxa_richness_score, ephemeroptera_richness_score, plecoptera_richness_score, trichoptera_richness_score, clinger_richness_score, long_lived_richness_score, intolerant_richness_score, percent_dominant_score,  predator_percent_score, tolerant_percent_score) ~   site_code + subbasin + wria_number + year, data = bibi, FUN = "mean", na.action = na.exclude)
 
+#Get year informaion associated with bibi_means
+
+bibi_years<-bibi_means |> 
+  dplyr::group_by(site_code) |> 
+  dplyr::summarize(n_years = n(),
+                   min_years = as.numeric(min(year)),
+                   max_years = as.numeric(max(year)),
+                   duration = max_years - min_years) 
+
+bibi_means_years <- left_join(bibi_means, bibi_years, by = "site_code")
+
 write.csv(bibi_means, paste0(output_folder,"/BIBI_means.csv"))
+write.csv(bibi_means_years, paste0(output_folder,"/bibi_means_years.csv"))
 
 bibi.lr<-bibi_means
 bibi.lr1<-bibi.lr
