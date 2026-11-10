@@ -29,49 +29,7 @@ today<-Sys.Date()
 # # only  2022 and after
 # # Projects: Ambient, Vashon, Miller-Walker, Boise 
 # # BIBI scores
-# 
-# #The code runs through trends analysis at multiple spatial scales: REgional, subbasin, WRIA and site level trends.
-# 
-# ###Raw Data Processing####
-# #library(Microsoft365R) #for connecting to SharePoint
-# library(readxl) #for reading excel file
-# library(tidyverse) #for data wrangling
-# 
-# 
-# library(janitor) #for cleaning names
-# library(plyr)
-# library(openxlsx)
-# library(lubridate)
-# library(stringr)
-# library(tidyverse)
-# library(dplyr)
-# getwd()
-# 
-# atts<-read.xlsx("data/inputs/2012_taxa_attributes.xlsx")
-# lookup<-read.csv("data/inputs/ORWA_TaxaTranslator_20250812.csv")##update this to latest translator table.
-# BCG_atts<-read.csv("data/inputs/ORWA_Attributes_20250812.csv")#load the BCG taxonomic hierarchy
-# 
-# #create empty folder for graphs and csvs
-# output_folder <- paste0("data/output/BIBItrends_",Sys.Date()) 
-# dir.create(output_folder)
-# 
-# 
-# ###This function takes the raw taxa data .txt output from PSSB and binds it all into one data object
-# taxaBind <- function(file.path) {
-#   
-#   path.files <- list.files(file.path)
-#   # read in files
-#   list.with.each.file <- lapply(paste(file.path, list.files(file.path), sep = ''), function(y) read.delim(y, header=TRUE))
-#   taxa<-do.call("rbind.data.frame", list.with.each.file)
-#   return(taxa)
-#   
-#   
-# }
-# 
-# #bind text files into one large dataframe
-# file.path="data/pssb_2002-2025_BIBIscores/" #where are the text files stored?
-# BIBI_pssb_messy <-taxaBind(file.path)
-# write.csv(BIBI_pssb_messy, paste0(output_folder, "/BIBI-scores_from-PSSB.csv"))
+
 BIBI_pssb_messy<-scores
 
 #Preliminary exploration of the data set
@@ -105,7 +63,8 @@ library(tidyverse)
 
 bibi<-BIBI_pssb
 
-#########  Format, remove data from wrong months, average scores from samples with same site+year, and subset B-IBI data to data since 2001 with more than 9 years of data
+## cleaning ####
+# remove data from wrong months, average scores from samples with same site+year, and subset B-IBI data to data since 2001 with more than 9 years of data 
 bibi$month <- format(as.Date(bibi$event_date, '%m/%d/%Y'), "%m") # add month column
 bibi$year <- format(as.Date(bibi$event_date, '%m/%d/%Y'), "%Y") # add year column
 
@@ -123,17 +82,19 @@ bibi_means <- aggregate(cbind(overall_score, taxa_richness_score, ephemeroptera_
 
 #Get year informaion associated with bibi_means
 
-bibi_years<-bibi_means |> 
-  dplyr::group_by(site_code) |> 
-  dplyr::summarize(n_years = n(),
-                   min_years = as.numeric(min(year)),
-                   max_years = as.numeric(max(year)),
-                   duration = max_years - min_years) 
+bibi_years<-bibi_means |> #the new table will be 
+  dplyr::group_by(site_code) |> # group the data by site code
+  dplyr::summarize(n_years = n(), #for each site code, count the number of years in the group, then
+                   min_years = as.numeric(min(year)), #record the minimum year (turn to numeric), then
+                   max_years = as.numeric(max(year)), #record the maximum year (turn to numeric), then
+                   duration = max_years - min_years) #determine the duration of years
 
-bibi_means_years <- left_join(bibi_means, bibi_years, by = "site_code")
+bibi_means_years_10 <- left_join(bibi_means, bibi_years, by = "site_code") |> #keep all rows of bibi_means, and add the info from bibi_years)
+  filter(n_years > 9)
+
 
 write.csv(bibi_means, paste0(output_folder,"/BIBI_means.csv"))
-write.csv(bibi_means_years, paste0(output_folder,"/bibi_means_years.csv"))
+write.csv(bibi_means_years_10, paste0(output_folder,"/bibi_means_years.csv"))
 
 bibi.lr<-bibi_means
 bibi.lr1<-bibi.lr
