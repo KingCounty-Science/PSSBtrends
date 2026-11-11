@@ -11,8 +11,7 @@ library(janitor) #for cleaning names.
 # Specifications:
 # only  2002 and after
 # Projects: Ambient, Vashon, Miller-Walker, Boise 
-# BIBI scores
-# SHOULD I REDOWNLOAD AND ONLY USE CORSE??? ####
+# COARSE BIBI scores
 
 #Read in the data #This is all scores from PSSB from all of time from Boise, Vashon, Miller Walker, and Ambient
 
@@ -256,7 +255,7 @@ pp<-pp+geom_abline(aes(intercept=get(paste0("MKinter_",str_split(var, "_", n=2)[
 # pp<-pp+geom_text(mapping= aes(x=2012, y=6, label=paste("Slope = ", round(get(paste0("MKSlope_",str_split(var, "_", n=2)[[1]][2])), 3))), colour="black")+theme(text=element_text(size=20), plot.title=element_text(hjust=.5, size=24, face="bold"))
 # ggsave(paste0("WRIA9_BIBI~timeUp_", scal, "_", var,   "-2.png"), plot = pp, width=20, height=10)
 # }
-print(pp)
+pp
 # }
 ggsave(paste0(output_folder,"/OverallScores_Sites_PSSB.png"), plot = pp, width=20, height=10)
 
@@ -273,3 +272,4 @@ ggplot(bibi, aes(x=year, y=overall_score))+  geom_rect(xmin=2001, xmax=2022, ymi
 
 
 ggsave(paste0(output_folder,"/SiteScores_PSSB.png"), width=20, height=10)
+
