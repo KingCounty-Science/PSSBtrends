@@ -43,10 +43,6 @@ BIBI_pssb |> select(stream) |> unique()
 BIBI_pssb |> select(subbasin) |> unique()
 BIBI_pssb |> select(visit_id) |> n_distinct()
 
-
-
-bibi_cleaning <-BIBI_pssb
-
 ## cleaning ####
 bibi_cleaning <-BIBI_pssb
 
@@ -59,7 +55,7 @@ bibi_cleaning$sampnum <- paste(bibi_cleaning$site_code, format(as.Date(bibi_clea
 bibi_cleaning <- bibi_cleaning |> filter(month %in% c('07', '08', '09', '10'))
 
 
-
+#This only gives us the 2nd and above observation, we don't subset the initial instance of a sitecode & year.
 dups<-bibi_cleaning[duplicated(bibi_cleaning[,c("project" , "wria_number"  , "basin" , "subbasin" , "site_code", "year")]),]
 
 names(bibi_cleaning)
@@ -67,7 +63,7 @@ names(bibi_cleaning)
 #bibi_means has site year metrics
 bibi_means <- aggregate(cbind(overall_score, taxa_richness_score, ephemeroptera_richness_score, plecoptera_richness_score, trichoptera_richness_score, clinger_richness_score, long_lived_richness_score, intolerant_richness_score, percent_dominant_score,  predator_percent_score, tolerant_percent_score) ~   site_code + subbasin + wria_number + year, data = bibi_cleaning, FUN = "mean", na.action = na.exclude)
 
-#Get year informaion associated with bibi_means
+#Get year information associated with bibi_means
 
 bibi_years<-bibi_means |> #the new table will be 
   dplyr::group_by(site_code) |> # group the data by site code
@@ -97,14 +93,14 @@ bibi<-bibi %>%
 unique(bibi$site_code)
 bibi <- bibi |> filter(por > 9) # look only at sites with >9 years of data
 
-bibi$year_num <- as.numeric(bibi$year)
+bibi$year_num <- as.numeric(bibi$year) #add a year column as numeric
 bibi <- 
   bibi %>%
   dplyr::group_by(site_code) %>%
-  dplyr::mutate(timerange = max(year_num) - min(year_num)) %>% # add on period of record col
+  dplyr::mutate(timerange = max(year_num) - min(year_num)) %>% # add on range of record col
   ungroup()
 
-bibi<-bibi |> filter(timerange > 9)# look only at streams with >9 years of data
+bibi<-bibi |> filter(timerange > 8)# look only at streams with >9 years of data #I think we want 10 datapoints even though we get that after 9 years.
 
 unique(bibi$site_code)
 
@@ -157,15 +153,17 @@ form<-names(bibi)[5:(ncol(bibi)-3)]
 library(plyr) ## Figure out how to re-write this without the plyr package
 
 for (var in form) {
-  bibi<- ddply(bibi, .variables =scal, mutate, slope =lm(get(paste0(var)) ~ as.numeric(year))[[1]][2])
-  bibi<-ddply(bibi, .variables =scal, mutate, pval = summary(lm(get(paste0(var)) ~ as.numeric(year)))[[4]][2,4])
-  bibi$trend <- ifelse(bibi$pval < 0.05 & bibi$slope < 0, "negative", ifelse(bibi$pval < 0.05 & bibi$slope > 0, "positive", "none")) # add trend col
-  bibi<-ddply(bibi,.(get(scal)),mutate, mk.tau=kendallTrendTest( get(paste0(var))~ as.numeric(year))$estimate[1])
-  # bibi<-ddply(bibi,.(get(scal)),mutate, mk.tau=kendallTrendTest(as.formula(paste0(colnames(bibi[i]), " ~ ", "as.numeric(Year)")))$estimate[1])
-  bibi<-ddply(bibi,.(get(scal)),mutate, mk.Sen=kendallTrendTest( get(paste0(var))~ as.numeric(year))$estimate[2])
-  bibi<-ddply(bibi,.(get(scal)),mutate, mk.pval=kendallTrendTest( get(paste0(var))~ as.numeric(year))$p.value)
-  bibi<-ddply(bibi,.(get(scal)),mutate, mk.inter=kendallTrendTest( get(paste0(var))~ as.numeric(year))$estimate[3])
-  bibi$MKtrend <- ifelse(bibi$mk.pval < 0.05 & bibi$mk.tau < 0, "negative", ifelse(bibi$mk.pval < 0.05 & bibi$mk.tau > 0, "positive", "none"))
+  #First linear regression (slope, p-value, and interpretation)
+  bibi<- ddply(bibi, .variables =scal, mutate, slope =lm(get(paste0(var)) ~ as.numeric(year))[[1]][2]) #linear regression slope
+  bibi<-ddply(bibi, .variables =scal, mutate, pval = summary(lm(get(paste0(var)) ~ as.numeric(year)))[[4]][2,4]) #linear regression pvalue
+  bibi$trend <- ifelse(bibi$pval < 0.05 & bibi$slope < 0, "negative", ifelse(bibi$pval < 0.05 & bibi$slope > 0, "positive", "none")) # interpret linear regression trend direction as positive, negative or none
+  
+  #Then Mann-kendall
+  bibi<-ddply(bibi,.(get(scal)),mutate, mk.tau=kendallTrendTest( get(paste0(var))~ as.numeric(year))$estimate[1]) #What is the strength of the trend?
+  bibi<-ddply(bibi,.(get(scal)),mutate, mk.Sen=kendallTrendTest( get(paste0(var))~ as.numeric(year))$estimate[2]) #what is the slope (points per year)
+  bibi<-ddply(bibi,.(get(scal)),mutate, mk.pval=kendallTrendTest( get(paste0(var))~ as.numeric(year))$p.value) #how significant is the pvalue for mannkendall?
+  bibi<-ddply(bibi,.(get(scal)),mutate, mk.inter=kendallTrendTest( get(paste0(var))~ as.numeric(year))$estimate[3]) #This is B0 or the intercept
+  bibi$MKtrend <- ifelse(bibi$mk.pval < 0.05 & bibi$mk.tau < 0, "negative", ifelse(bibi$mk.pval < 0.05 & bibi$mk.tau > 0, "positive", "none")) #this is an inpterpretation of the pvalue and tau (if it is less that .05, what direction is the trend.)
   colnames(bibi)[ncol(bibi)-7]<-paste0("slope_",var)
   colnames(bibi)[ncol(bibi)-6]<-paste0("LRpval_", var)
   colnames(bibi)[ncol(bibi)-5]<-paste0("LRtrend_", var)
@@ -233,6 +231,9 @@ sum(bibi_sum_site$len)
 #     ggsave(paste0("BIBI~timeDown_", scal, "_",var, "Bellevue.png"), plot = pn, width=20, height=10)
 #   }
 # }
+
+
+## Here it appears beth is trying to make a plot for each site, where the shape indicates the significance of the trend, the line is the trend, and the collors indicate general stream health. For some reason the shape of the points is not working.
 library(RColorBrewer)
 
 # for (var in colnames(bibi[str_subset(colnames(bibi), "trend")])) {
@@ -244,12 +245,12 @@ shapes = c(6, 4, 2)
 shapes <- shapes[as.numeric(bibi$pchOS)]
 
 
-pp<-ggplot(bibi, aes(as.numeric(year), get(str_subset(colnames(bibi[,c(1:18)]), str_split(var, "_", n=2)[[1]][2])), group = get(scal), fill = get(scal), colour = get(scal))) + 
+pp<-ggplot(bibi, aes(year_num, get(str_subset(colnames(bibi[,c(1:18)]), str_split(var, "_", n=2)[[1]][2])), group = get(scal), fill = get(scal), colour = get(scal))) + 
   ylim(c(0,100)) + 
   geom_point( aes(shape = c(shapes))) + scale_shape_identity()+ #theme(legend.position="none") +
   facet_wrap(~ subbasin, ncol = 4) +  #factor(stream2) + 
   theme(legend.position="none",axis.title=element_text(size=20,face="bold"), axis.text=element_text(size=15), axis.text.x = element_text(angle = 90), strip.text = element_text(size=12)) + labs(y = var, x = "Year")
-
+pp
 pp<-pp+geom_abline(aes(intercept=get(paste0("MKinter_",str_split(var, "_", n=2)[[1]][2])),slope=get(paste0("MKSlope_",str_split(var, "_", n=2)[[1]][2])),  colour=get(scal)))+
   scale_colour_manual(values=rep(brewer.pal(8,"Dark2"), times=30))
 # pp<-pp+geom_text(mapping= aes(x=2012, y=6, label=paste("Slope = ", round(get(paste0("MKSlope_",str_split(var, "_", n=2)[[1]][2])), 3))), colour="black")+theme(text=element_text(size=20), plot.title=element_text(hjust=.5, size=24, face="bold"))
@@ -260,11 +261,11 @@ pp
 ggsave(paste0(output_folder,"/OverallScores_Sites_PSSB.png"), plot = pp, width=20, height=10)
 
 
-ggplot(bibi, aes(x=year, y=overall_score))+  geom_rect(xmin=2001, xmax=2022, ymin=0, ymax=20, fill="firebrick1", color="black")+
-  geom_rect(xmin=2001, xmax=2022, ymin=20, ymax=40, fill="tan1", color="black")+
-  geom_rect(xmin=2001, xmax=2022, ymin=40, ymax=60, fill="lightgoldenrod", color="black")+
-  geom_rect(xmin=2001, xmax=2022, ymin=60, ymax=80, fill="lightgreen", color="black")+
-  geom_rect(xmin=2001, xmax=2022, ymin=80, ymax=100, fill="steelblue1", color="black")+
+ggplot(bibi, aes(x=year_num, y=overall_score))+  geom_rect(xmin=2001, xmax=2026, ymin=0, ymax=20, fill="firebrick1", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=20, ymax=40, fill="tan1", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=40, ymax=60, fill="lightgoldenrod", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=60, ymax=80, fill="lightgreen", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=80, ymax=100, fill="steelblue1", color="black")+
   # geom_smooth(se=F, method="lm")+
   geom_abline(aes(intercept=get(paste0("MKinter_",str_split(var, "_", n=2)[[1]][2])),slope=get(paste0("MKSlope_",str_split(var, "_", n=2)[[1]][2]))), color="blue", size=1)+
   theme(legend.position = "none")+
