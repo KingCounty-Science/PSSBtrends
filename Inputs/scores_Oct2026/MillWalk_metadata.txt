@@ -1,0 +1,12 @@
+Title: Scores
+Area Filter: All Streams and Rivers
+Project Filter: King-DNRP: Miller-Walker
+Date Filter: From 2002, all events at each site
+Replicate Handling: Combine replicates, then calculate
+Score Type: 0-100 B-IBI
+Taxa Attributes: Fore, Wisseman, 2012 (recommended for 0-100 B-IBI)
+Taxonomic Resolution: 2012 STE: Coarse
+Taxa Mapping: Map to modern taxa when available
+Organisms per Visit: At most 450, when over 450, subsampled using method 2 (fully random, does not conserve taxa richness)
+Sorted by: Location, Agency, Project, Site Code, Date
+Generation Time: 11/10/2026 4:25 PM
