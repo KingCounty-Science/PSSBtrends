@@ -52,7 +52,8 @@ bibi_cleaning$year <- format(as.Date(bibi_cleaning$event_date, '%m/%d/%Y'), "%Y"
 
 bibi_cleaning$sampnum <- paste(bibi_cleaning$site_code, format(as.Date(bibi_cleaning$event_date, '%m/%d/%Y'), "%y"), sep = "_") # add sample identifier
 
-bibi_cleaning <- bibi_cleaning |> filter(month %in% c('07', '08', '09', '10'))
+bibi_cleaning <- bibi_cleaning |> 
+  filter(month %in% c('07', '08', '09', '10')) #only keep samples collected in sample windo
 
 
 #This only gives us the 2nd and above observation, we don't subset the initial instance of a sitecode & year.
@@ -75,6 +76,11 @@ bibi_years<-bibi_means |> #the new table will be
 bibi_means_years_10 <- left_join(bibi_means, bibi_years, by = "site_code") |> #keep all rows of bibi_means, and add the info from bibi_years)
   filter(n_years > 9)
 
+ggplot(bibi_years, aes(x = min_years))+
+  geom_histogram(binwidth = 1)
+
+#create a vector with the sites that had collection begin in 2014 or after
+later_starts<-bibi_years |> filter(min_years >= 2014) |> select(site_code) |> unique() |> pull()
 
 write.csv(bibi_means, paste0(output_folder,"/BIBI_means.csv"))
 write.csv(bibi_means_years_10, paste0(output_folder,"/bibi_means_years.csv"))
@@ -83,7 +89,9 @@ write.csv(bibi_means_years_10, paste0(output_folder,"/bibi_means_years.csv"))
 #####Site trends ####
 library(EnvStats)
 
-bibi<-bibi_means
+#get the full dataset
+bibi <- bibi_means |> 
+  filter_out(year == 2026) #drop incomplete 2026 data
 
 bibi<-bibi %>%
   dplyr::group_by(site_code) %>%
@@ -100,7 +108,17 @@ bibi <-
   dplyr::mutate(timerange = max(year_num) - min(year_num)) %>% # add on range of record col
   ungroup()
 
-bibi<-bibi |> filter(timerange > 8)# look only at streams with >9 years of data #I think we want 10 datapoints even though we get that after 9 years.
+bibi<-bibi |> filter(timerange > 8) # look only at streams with >9 years of data #I think we want 10 datapoints even though we get that after 9 years.
+
+#get the no late starts dataset
+bibi_no_late_starts <- bibi_means |> 
+  filter_out(site_code %in% later_starts) |> 
+  dplyr::group_by(site_code) %>%
+  dplyr::mutate(por = n_distinct(year)) %>% # add on period of record col
+  ungroup() |> 
+  filter(por > 9)
+
+
 
 unique(bibi$site_code)
 
@@ -109,6 +127,11 @@ ggplot(bibi, aes(x=site_code, y=year))+geom_tile()
 ggplot(bibi, aes(x=year, y=overall_score))+geom_smooth(se=F)+theme(legend.position = "none")+
   geom_point()
 
+#plot only sites started prior to 2014
+ggplot(bibi_no_late_starts, aes(x=site_code, y=year))+geom_tile()
+
+ggplot(bibi_no_late_starts, aes(x=year, y=overall_score))+geom_smooth(se=F)+theme(legend.position = "none")+
+  geom_point()
 
 
 library(ggpmisc)
@@ -122,11 +145,30 @@ meanscores_sites<- bibi |> select(site_code, overall_score, year) |>
                    max = max(overall_score),
                    median = median(overall_score))
 
+meanscores_sites_fewer<- bibi_no_late_starts |> select(site_code, overall_score, year) |>
+  dplyr::group_by(year) |>
+  dplyr::summarise(meanScore = mean(overall_score),
+                   nyears = n_distinct(site_code),
+                   sd = sd(overall_score),
+                   min = min(overall_score),
+                   max = max(overall_score),
+                   median = median(overall_score))
+
+
 meanscore<-ggplot(meanscores_sites, aes(x=year, y=meanScore))+geom_smooth(method="lm",se=F)+theme(legend.position = "none")+
   geom_point()+ylim(c(0,100))+labs(y="BIBI Score")+
   stat_poly_eq(formula = y ~ x, rr.digits = 2, coef.digits = 3, size = 4, color = "black", aes(label = paste(..eq.label.., ..rr.label.., sep = "~")), parse = TRUE) 
 
-scores<-ggplot(bibi )+
+bg <- ggplot(bibi)+
+  geom_rect(xmin=2001, xmax=2025, ymin=0, ymax=20, fill="firebrick1", color="black")+
+  geom_rect(xmin=2001, xmax=2025, ymin=20, ymax=40, fill="tan1", color="black")+
+  geom_rect(xmin=2001, xmax=2025, ymin=40, ymax=60, fill="lightgoldenrod", color="black")+
+  geom_rect(xmin=2001, xmax=2025, ymin=60, ymax=80, fill="lightgreen", color="black")+
+  geom_rect(xmin=2001, xmax=2025, ymin=80, ymax=100, fill="steelblue1", color="black")
+
+
+
+scores<- ggplot(bibi)+
   geom_rect(xmin=2001, xmax=2022, ymin=0, ymax=20, fill="firebrick1", color="black")+
   geom_rect(xmin=2001, xmax=2022, ymin=20, ymax=40, fill="tan1", color="black")+
   geom_rect(xmin=2001, xmax=2022, ymin=40, ymax=60, fill="lightgoldenrod", color="black")+
@@ -137,8 +179,26 @@ scores<-ggplot(bibi )+
   geom_smooth(data=meanscores_sites, mapping=aes(x=as.numeric(paste0(year)), y=meanScore), method="lm",se=F)+
   labs(y="Overall Score", x="Year")+ theme(text = element_text(size = 28))+
   geom_quantile(data=bibi, mapping=aes(x=as.numeric(paste0(year)), y=overall_score), quantiles=.5, color="red", linewidth = 1)#+
-# geom_abline(slope=0.48, intercept = -914.2032, color="red", lwd=1)##adding Sen-Theil line and intercept calculated above
 
+scores
+
+#plot only for fewer sites
+#Just the scores
+ggplot(meanscores_sites_fewer, aes(x=year, y=meanScore))+geom_smooth(method="lm",se=F)+theme(legend.position = "none")+
+  geom_point()+ylim(c(0,100))+labs(y="BIBI Score")+
+  stat_poly_eq(formula = y ~ x, rr.digits = 2, coef.digits = 3, size = 4, color = "black", aes(label = paste(..eq.label.., ..rr.label.., sep = "~")), parse = TRUE) 
+#scores and trend with background 
+ggplot(bibi_no_late_starts)+
+  geom_rect(xmin=2001, xmax=2022, ymin=0, ymax=20, fill="firebrick1", color="black")+
+  geom_rect(xmin=2001, xmax=2022, ymin=20, ymax=40, fill="tan1", color="black")+
+  geom_rect(xmin=2001, xmax=2022, ymin=40, ymax=60, fill="lightgoldenrod", color="black")+
+  geom_rect(xmin=2001, xmax=2022, ymin=60, ymax=80, fill="lightgreen", color="black")+
+  geom_rect(xmin=2001, xmax=2022, ymin=80, ymax=100, fill="steelblue1", color="black")+
+  geom_boxplot(aes(y=overall_score, x=as.numeric(paste0(year)), group=as.factor(year)), fill="white")+
+  geom_point(data=meanscores_sites_fewer, mapping=aes(x=as.numeric(paste0(year)), y=meanScore))+
+  geom_smooth(data=meanscores_sites_fewer, mapping=aes(x=as.numeric(paste0(year)), y=meanScore), method="lm",se=F)+
+  labs(y="Overall Score", x="Year")+ theme(text = element_text(size = 28))+
+  geom_quantile(data=bibi_no_late_starts, mapping=aes(x=as.numeric(paste0(year)), y=overall_score), quantiles=.5, color="red", linewidth = 1)#+
 
 
 scal<-"site_code" # "Site.Code" or "Subbasin"
@@ -274,3 +334,8 @@ ggplot(bibi, aes(x=year_num, y=overall_score))+  geom_rect(xmin=2001, xmax=2026,
 
 ggsave(paste0(output_folder,"/SiteScores_PSSB.png"), width=20, height=10)
 
+#How often is the regression slope vs the median slope different?
+
+
+ggplot(bibi, aes(x=min_y) +
+         geom_his
