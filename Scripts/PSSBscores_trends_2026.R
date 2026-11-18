@@ -108,10 +108,9 @@ bibi <-
   dplyr::mutate(timerange = max(year_num) - min(year_num)) %>% # add on range of record col
   ungroup()
 
-bibi<-bibi |> filter(timerange > 8) # look only at streams with >9 years of data #I think we want 10 datapoints even though we get that after 9 years.
-
 #get the no late starts dataset
 bibi_no_late_starts <- bibi_means |> 
+  filter_out((year==2026)) |> 
   filter_out(site_code %in% later_starts) |> 
   dplyr::group_by(site_code) %>%
   dplyr::mutate(por = n_distinct(year)) %>% # add on period of record col
@@ -119,8 +118,8 @@ bibi_no_late_starts <- bibi_means |>
   filter(por > 9)
 
 
-
 unique(bibi$site_code)
+unique(bibi_no_late_starts$site_code)
 
 ggplot(bibi, aes(x=site_code, y=year))+geom_tile()
 
@@ -158,15 +157,7 @@ meanscores_sites_fewer<- bibi_no_late_starts |> select(site_code, overall_score,
 meanscore<-ggplot(meanscores_sites, aes(x=year, y=meanScore))+geom_smooth(method="lm",se=F)+theme(legend.position = "none")+
   geom_point()+ylim(c(0,100))+labs(y="BIBI Score")+
   stat_poly_eq(formula = y ~ x, rr.digits = 2, coef.digits = 3, size = 4, color = "black", aes(label = paste(..eq.label.., ..rr.label.., sep = "~")), parse = TRUE) 
-
-bg <- ggplot(bibi)+
-  geom_rect(xmin=2001, xmax=2025, ymin=0, ymax=20, fill="firebrick1", color="black")+
-  geom_rect(xmin=2001, xmax=2025, ymin=20, ymax=40, fill="tan1", color="black")+
-  geom_rect(xmin=2001, xmax=2025, ymin=40, ymax=60, fill="lightgoldenrod", color="black")+
-  geom_rect(xmin=2001, xmax=2025, ymin=60, ymax=80, fill="lightgreen", color="black")+
-  geom_rect(xmin=2001, xmax=2025, ymin=80, ymax=100, fill="steelblue1", color="black")
-
-
+meanscore
 
 scores<- ggplot(bibi)+
   geom_rect(xmin=2001, xmax=2022, ymin=0, ymax=20, fill="firebrick1", color="black")+
@@ -188,17 +179,21 @@ ggplot(meanscores_sites_fewer, aes(x=year, y=meanScore))+geom_smooth(method="lm"
   geom_point()+ylim(c(0,100))+labs(y="BIBI Score")+
   stat_poly_eq(formula = y ~ x, rr.digits = 2, coef.digits = 3, size = 4, color = "black", aes(label = paste(..eq.label.., ..rr.label.., sep = "~")), parse = TRUE) 
 #scores and trend with background 
-ggplot(bibi_no_late_starts)+
-  geom_rect(xmin=2001, xmax=2022, ymin=0, ymax=20, fill="firebrick1", color="black")+
-  geom_rect(xmin=2001, xmax=2022, ymin=20, ymax=40, fill="tan1", color="black")+
-  geom_rect(xmin=2001, xmax=2022, ymin=40, ymax=60, fill="lightgoldenrod", color="black")+
-  geom_rect(xmin=2001, xmax=2022, ymin=60, ymax=80, fill="lightgreen", color="black")+
-  geom_rect(xmin=2001, xmax=2022, ymin=80, ymax=100, fill="steelblue1", color="black")+
+plot_all_sites_trends <-ggplot(bibi_no_late_starts)+
+  geom_rect(xmin=2001, xmax=2026, ymin=0, ymax=20, fill="firebrick1", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=20, ymax=40, fill="tan1", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=40, ymax=60, fill="lightgoldenrod", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=60, ymax=80, fill="lightgreen", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=80, ymax=100, fill="steelblue1", color="black")+
   geom_boxplot(aes(y=overall_score, x=as.numeric(paste0(year)), group=as.factor(year)), fill="white")+
   geom_point(data=meanscores_sites_fewer, mapping=aes(x=as.numeric(paste0(year)), y=meanScore))+
   geom_smooth(data=meanscores_sites_fewer, mapping=aes(x=as.numeric(paste0(year)), y=meanScore), method="lm",se=F)+
   labs(y="Overall Score", x="Year")+ theme(text = element_text(size = 28))+
-  geom_quantile(data=bibi_no_late_starts, mapping=aes(x=as.numeric(paste0(year)), y=overall_score), quantiles=.5, color="red", linewidth = 1)#+
+  geom_quantile(data=bibi_no_late_starts, mapping=aes(x=as.numeric(paste0(year)), y=overall_score), quantiles=.5, color="red", linewidth = 1) +
+  theme_minimal() #takes away grey and shrinks font a little
+
+plot_all_sites_trends
+ggsave(paste0(output_folder,"/all_sites_trends.png"), plot = plot_all_sites_trends, width = 20, height = 15, units="in")
 
 
 scal<-"site_code" # "Site.Code" or "Subbasin"
@@ -300,12 +295,14 @@ library(RColorBrewer)
 # if(nrow(bibi[bibi[var]=='positive',])>=1) {
 var="MKtrend_overall_score"
 
-bibi$pchOS<-as.factor(bibi$MKtrend_overall_score)
+bibi_small <- bibi|> filter_out(site_code %in% later_starts)
+
+bibi_small$pchOS<-as.factor(bibi_small$MKtrend_overall_score)
 shapes = c(6, 4, 2) 
-shapes <- shapes[as.numeric(bibi$pchOS)]
+shapes <- shapes[as.numeric(bibi_small$pchOS)]
 
 
-pp<-ggplot(bibi, aes(year_num, get(str_subset(colnames(bibi[,c(1:18)]), str_split(var, "_", n=2)[[1]][2])), group = get(scal), fill = get(scal), colour = get(scal))) + 
+pp<-ggplot(bibi_small, aes(year_num, get(str_subset(colnames(bibi_small[,c(1:18)]), str_split(var, "_", n=2)[[1]][2])), group = get(scal), fill = get(scal), colour = get(scal))) + 
   ylim(c(0,100)) + 
   geom_point( aes(shape = c(shapes))) + scale_shape_identity()+ #theme(legend.position="none") +
   facet_wrap(~ subbasin, ncol = 4) +  #factor(stream2) + 
@@ -321,7 +318,7 @@ pp
 ggsave(paste0(output_folder,"/OverallScores_Sites_PSSB.png"), plot = pp, width=20, height=10)
 
 
-ggplot(bibi, aes(x=year_num, y=overall_score))+  geom_rect(xmin=2001, xmax=2026, ymin=0, ymax=20, fill="firebrick1", color="black")+
+ggplot(bibi_small, aes(x=year_num, y=overall_score))+  geom_rect(xmin=2001, xmax=2026, ymin=0, ymax=20, fill="firebrick1", color="black")+
   geom_rect(xmin=2001, xmax=2026, ymin=20, ymax=40, fill="tan1", color="black")+
   geom_rect(xmin=2001, xmax=2026, ymin=40, ymax=60, fill="lightgoldenrod", color="black")+
   geom_rect(xmin=2001, xmax=2026, ymin=60, ymax=80, fill="lightgreen", color="black")+
@@ -334,8 +331,14 @@ ggplot(bibi, aes(x=year_num, y=overall_score))+  geom_rect(xmin=2001, xmax=2026,
 
 ggsave(paste0(output_folder,"/SiteScores_PSSB.png"), width=20, height=10)
 
+bibi_small %>%
+  select(site_code, MKtrend_overall_score, MKtrend_plecoptera_richness_score) |> unique() |> 
+  dplyr::count(MKtrend_overall_score) 
+
+
 #How often is the regression slope vs the median slope different?
 
 
 ggplot(bibi, aes(x=min_y) +
          geom_his
+       
