@@ -35,13 +35,13 @@ BIBI_pssb_messy |> select(project) |> unique()
 BIBI_pssb <- BIBI_pssb_messy |> filter(project != "Macroinvertebrates")
 
 BIBI_pssb |> select(project) |> unique() 
-
 BIBI_pssb |> select(agency) |> unique()
 BIBI_pssb |> select(site_code) |> unique()
 BIBI_pssb |> select(wria_number) |> unique()
 BIBI_pssb |> select(stream) |> unique()
 BIBI_pssb |> select(subbasin) |> unique()
 BIBI_pssb |> select(visit_id) |> n_distinct()
+BIBI_pssb |> select(number_of_organisms) |> unique()
 
 ## cleaning ####
 bibi_cleaning <-BIBI_pssb
@@ -53,8 +53,8 @@ bibi_cleaning$year <- format(as.Date(bibi_cleaning$event_date, '%m/%d/%Y'), "%Y"
 bibi_cleaning$sampnum <- paste(bibi_cleaning$site_code, format(as.Date(bibi_cleaning$event_date, '%m/%d/%Y'), "%y"), sep = "_") # add sample identifier
 
 bibi_cleaning <- bibi_cleaning |> 
-  filter(month %in% c('07', '08', '09', '10')) #only keep samples collected in sample windo
-
+  filter(month %in% c('07', '08', '09', '10')) |> #only keep samples collected in sample window
+  filter_out(number_of_organisms <450) # removes samples with fewer than 450 organisms
 
 #This only gives us the 2nd and above observation, we don't subset the initial instance of a sitecode & year.
 dups<-bibi_cleaning[duplicated(bibi_cleaning[,c("project" , "wria_number"  , "basin" , "subbasin" , "site_code", "year")]),]
@@ -62,7 +62,7 @@ dups<-bibi_cleaning[duplicated(bibi_cleaning[,c("project" , "wria_number"  , "ba
 names(bibi_cleaning)
 
 #bibi_means has site year metrics
-bibi_means <- aggregate(cbind(overall_score, taxa_richness_score, ephemeroptera_richness_score, plecoptera_richness_score, trichoptera_richness_score, clinger_richness_score, long_lived_richness_score, intolerant_richness_score, percent_dominant_score,  predator_percent_score, tolerant_percent_score) ~   site_code + subbasin + wria_number + year, data = bibi_cleaning, FUN = "mean", na.action = na.exclude)
+bibi_means <- aggregate(cbind(overall_score, taxa_richness_score, ephemeroptera_richness_score, plecoptera_richness_score, trichoptera_richness_score, clinger_richness_score, long_lived_richness_score, intolerant_richness_score, percent_dominant_score,  predator_percent_score, tolerant_percent_score) ~   site_code + subbasin + wria_number + year + number_of_organisms, data = bibi_cleaning, FUN = "mean", na.action = na.exclude)
 
 #Get year information associated with bibi_means
 
