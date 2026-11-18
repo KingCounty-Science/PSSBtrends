@@ -367,7 +367,7 @@ year_overall <-bibi_small |>
   select(site_code, year_num, overall_score) |> 
   unique()
 
-# CART model using only one predictor variable: YEar
+# CART model using only one predictor variable: Year
 # method = "anova" for continuous variable (?)
 cart_model <- rpart(
   overall_score ~ year_num,
