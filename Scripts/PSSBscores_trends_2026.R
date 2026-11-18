@@ -332,8 +332,25 @@ ggplot(bibi_small, aes(x=year_num, y=overall_score))+  geom_rect(xmin=2001, xmax
 ggsave(paste0(output_folder,"/SiteScores_PSSB.png"), width=20, height=10)
 
 bibi_small %>%
-  select(site_code, MKtrend_overall_score, MKtrend_plecoptera_richness_score) |> unique() |> 
-  dplyr::count(MKtrend_overall_score) 
+  select(site_code, 
+        MKtrend_overall_score, 
+        MKtrend_taxa_richness_score,
+        
+        MKtrend_ephemeroptera_richness_score,
+        MKtrend_plecoptera_richness_score,
+        MKtrend_trichoptera_richness_score,
+
+        MKtrend_clinger_richness_score,
+        MKtrend_long_lived_richness_score,
+        MKtrend_intolerant_richness_score,
+        
+        MKtrend_percent_dominant_score,
+        MKtrend_predator_percent_score,
+        MKtrend_tolerant_percent_score) |> 
+  unique () |> 
+  pivot_longer(!site_code, names_to = "metric", values_to = "trend") |> 
+  dplyr::count(metric,trend) |>
+  pivot_wider(names_from = trend, values_from = n )
 
 
 #How often is the regression slope vs the median slope different?
