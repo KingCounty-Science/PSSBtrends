@@ -357,5 +357,28 @@ bibi_small %>%
 
 
 ggplot(bibi, aes(x=min_y) +
-         geom_his
+         geom_hist)
        
+#CART analysis ####
+# Load the library
+library(rpart)
+
+year_overall <-bibi_small |> 
+  select(site_code, year_num, overall_score) |> 
+  unique()
+
+# CART model using only one predictor variable: YEar
+# method = "anova" for continuous variable (?)
+cart_model <- rpart(
+  overall_score ~ year_num,
+  data = year_overall,
+  method = "anova",
+  cp = 0.001) # control parameters
+
+# Print model summary
+print(cart_model)
+
+# Plot the tree
+plot(cart_model, uniform = TRUE, main = "CART: overall_score ~ Year")
+text(cart_model, use.n = TRUE, all = TRUE, cex = 0.8)
+
