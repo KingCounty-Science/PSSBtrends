@@ -83,13 +83,13 @@ ggplot(bibi_years, aes(x = min_years))+
 later_starts<-bibi_years |> filter(min_years >= 2014) |> select(site_code) |> unique() |> pull()
 
 write.csv(bibi_means, paste0(output_folder,"/BIBI_means.csv"))
-write.csv(bibi_means_years_10, paste0(output_folder,"/bibi_means_years.csv"))
+write.csv(bibi_means_years_10, paste0(output_folder,"/bibi_means_w_at_least_10yrs.csv"))
 
 
 #####Site trends ####
 library(EnvStats)
 
-#get the full dataset
+#get the full dataset; don't use this dataset for overall trends as this still includes sites in WRIA 7 and Boise that were started later
 bibi <- bibi_means |> 
   filter_out(year == 2026) #drop incomplete 2026 data
 
@@ -116,17 +116,23 @@ bibi_no_late_starts <- bibi_means |>
   dplyr::mutate(por = n_distinct(year)) %>% # add on period of record col
   ungroup() |> 
   filter(por > 9)
+bibi_no_late_starts<-bibi_no_late_starts %>%
+  dplyr::group_by(site_code) %>%
+  dplyr::mutate(por = n_distinct(year)) %>% # add on period of record col
+  ungroup()
 
+unique(bibi_no_late_starts$site_code)
+bibi_no_late_starts <- bibi_no_late_starts |> filter(por > 9) # look only at sites with >9 years of data
 
-unique(bibi$site_code)
+bibi_no_late_starts$year_num <- as.numeric(bibi_no_late_starts$year) #add a year column as numeric
+bibi_no_late_starts <- 
+  bibi_no_late_starts %>%
+  dplyr::group_by(site_code) %>%
+  dplyr::mutate(timerange = max(year_num) - min(year_num)) %>% # add on range of record col
+  ungroup()
+
 unique(bibi_no_late_starts$site_code)
 
-ggplot(bibi, aes(x=site_code, y=year))+geom_tile()
-
-ggplot(bibi, aes(x=year, y=overall_score))+geom_smooth(se=F)+theme(legend.position = "none")+
-  geom_point()
-
-#plot only sites started prior to 2014
 ggplot(bibi_no_late_starts, aes(x=site_code, y=year))+geom_tile()
 
 ggplot(bibi_no_late_starts, aes(x=year, y=overall_score))+geom_smooth(se=F)+theme(legend.position = "none")+
@@ -153,32 +159,12 @@ meanscores_sites_fewer<- bibi_no_late_starts |> select(site_code, overall_score,
                    max = max(overall_score),
                    median = median(overall_score))
 
-
-meanscore<-ggplot(meanscores_sites, aes(x=year, y=meanScore))+geom_smooth(method="lm",se=F)+theme(legend.position = "none")+
-  geom_point()+ylim(c(0,100))+labs(y="BIBI Score")+
-  stat_poly_eq(formula = y ~ x, rr.digits = 2, coef.digits = 3, size = 4, color = "black", aes(label = paste(..eq.label.., ..rr.label.., sep = "~")), parse = TRUE) 
-meanscore
-
-scores<- ggplot(bibi)+
-  geom_rect(xmin=2001, xmax=2022, ymin=0, ymax=20, fill="firebrick1", color="black")+
-  geom_rect(xmin=2001, xmax=2022, ymin=20, ymax=40, fill="tan1", color="black")+
-  geom_rect(xmin=2001, xmax=2022, ymin=40, ymax=60, fill="lightgoldenrod", color="black")+
-  geom_rect(xmin=2001, xmax=2022, ymin=60, ymax=80, fill="lightgreen", color="black")+
-  geom_rect(xmin=2001, xmax=2022, ymin=80, ymax=100, fill="steelblue1", color="black")+
-  geom_boxplot(aes(y=overall_score, x=as.numeric(paste0(year)), group=as.factor(year)), fill="white")+
-  geom_point(data=meanscores_sites, mapping=aes(x=as.numeric(paste0(year)), y=meanScore))+
-  geom_smooth(data=meanscores_sites, mapping=aes(x=as.numeric(paste0(year)), y=meanScore), method="lm",se=F)+
-  labs(y="Overall Score", x="Year")+ theme(text = element_text(size = 28))+
-  geom_quantile(data=bibi, mapping=aes(x=as.numeric(paste0(year)), y=overall_score), quantiles=.5, color="red", linewidth = 1)#+
-
-scores
-
-#plot only for fewer sites
-#Just the scores
+#plot for trends across years of all sites, based on the appropriate number of sites (e.g., those that have a long duration of data, started in 2002-2013, only including samples with at least 450 orgs)
+#just the mean scores
 ggplot(meanscores_sites_fewer, aes(x=year, y=meanScore))+geom_smooth(method="lm",se=F)+theme(legend.position = "none")+
   geom_point()+ylim(c(0,100))+labs(y="BIBI Score")+
   stat_poly_eq(formula = y ~ x, rr.digits = 2, coef.digits = 3, size = 4, color = "black", aes(label = paste(..eq.label.., ..rr.label.., sep = "~")), parse = TRUE) 
-#scores and trend with background 
+#scores and trend with background and with 10th, 50th, and 90th quantiles
 plot_all_sites_trends <-ggplot(bibi_no_late_starts)+
   geom_rect(xmin=2001, xmax=2026, ymin=0, ymax=20, fill="firebrick1", color="black")+
   geom_rect(xmin=2001, xmax=2026, ymin=20, ymax=40, fill="tan1", color="black")+
@@ -187,17 +173,22 @@ plot_all_sites_trends <-ggplot(bibi_no_late_starts)+
   geom_rect(xmin=2001, xmax=2026, ymin=80, ymax=100, fill="steelblue1", color="black")+
   geom_boxplot(aes(y=overall_score, x=as.numeric(paste0(year)), group=as.factor(year)), fill="white")+
   geom_point(data=meanscores_sites_fewer, mapping=aes(x=as.numeric(paste0(year)), y=meanScore))+
-  geom_smooth(data=meanscores_sites_fewer, mapping=aes(x=as.numeric(paste0(year)), y=meanScore), method="lm",se=F)+
-  labs(y="Overall Score", x="Year")+ theme(text = element_text(size = 28))+
-  geom_quantile(data=bibi_no_late_starts, mapping=aes(x=as.numeric(paste0(year)), y=overall_score), quantiles=.5, color="red", linewidth = 1) +
-  theme_minimal() #takes away grey and shrinks font a little
+  #geom_smooth(data=meanscores_sites_fewer, mapping=aes(x=as.numeric(paste0(year)), y=meanScore), method="lm",se=F)+
+  labs(y="Overall Score", x="Year")+ 
+  theme(text = element_text(size = 25))+
+  geom_quantile(data=bibi_no_late_starts, mapping=aes(x=as.numeric(paste0(year)), y=overall_score), quantiles=.5, color="blue", linewidth = 1) +
+  geom_quantile(data=bibi_no_late_starts, mapping=aes(x=as.numeric(paste0(year)), y=overall_score), quantiles=.9, color="darkgreen", linewidth = 1) +
+  geom_quantile(data=bibi_no_late_starts, mapping=aes(x=as.numeric(paste0(year)), y=overall_score), quantiles=.1, color="white", linewidth = 1) #+
+  #theme_minimal() #takes away grey and shrinks font a little
 
 plot_all_sites_trends
-ggsave(paste0(output_folder,"/all_sites_trends.png"), plot = plot_all_sites_trends, width = 20, height = 15, units="in")
+
+ggsave(paste0(output_folder,"/all_sites_trends_w_10th_50th_90th_quantiles.png"), plot = plot_all_sites_trends, width = 20, height = 15, units="in")
 
 
 scal<-"site_code" # "Site.Code" or "Subbasin"
 
+### code for calculating trends using all data in "bibi"; see below for code calculating trends using only data in "bibi_no_late_starts", which is the most filtered (most conservative) set of data
 bibi<-subset(bibi, site_code!="")
 form<-names(bibi)[5:(ncol(bibi)-3)]
 # bibi.lr[bibi.lr$Year<2012,"Overall.Score"]<-(bibi.lr[bibi.lr$Year<2012,"Overall.Score"]*.972)+5.01
@@ -259,6 +250,72 @@ write.csv(bibi_sum_site,paste0(output_folder,"/score_RKTtrend_summarized_by_site
 
 sum(bibi_sum_site$len)
 
+#######
+
+### code for calculating trends using only data in "bibi_no_late_starts", which is the most filtered (most conservative) set of data; see code above for all code calculating trends using all data in "bibi"
+
+bibi_no_late_starts<-subset(bibi_no_late_starts, site_code!="")
+form<-names(bibi_no_late_starts)[5:(ncol(bibi_no_late_starts)-3)]
+# bibi.lr[bibi.lr$Year<2012,"Overall.Score"]<-(bibi.lr[bibi.lr$Year<2012,"Overall.Score"]*.972)+5.01
+# for (i in 9:(ncol(bibi.lr))) {
+
+#this loops through each of the 11 BiBi metrics and calculates the trend according to site, then records the output repeatedly for that site along all years. Why do it this way?
+
+library(plyr) ## Figure out how to re-write this without the plyr package
+
+for (var in form) {
+  #First linear regression (slope, p-value, and interpretation)
+  bibi_no_late_starts<- ddply(bibi_no_late_starts, .variables =scal, mutate, slope =lm(get(paste0(var)) ~ as.numeric(year))[[1]][2]) #linear regression slope
+  bibi_no_late_starts<-ddply(bibi_no_late_starts, .variables =scal, mutate, pval = summary(lm(get(paste0(var)) ~ as.numeric(year)))[[4]][2,4]) #linear regression pvalue
+  bibi_no_late_starts$trend <- ifelse(bibi_no_late_starts$pval < 0.05 & bibi_no_late_starts$slope < 0, "negative", ifelse(bibi_no_late_starts$pval < 0.05 & bibi_no_late_starts$slope > 0, "positive", "none")) # interpret linear regression trend direction as positive, negative or none
+  
+  #Then Mann-kendall
+  bibi_no_late_starts<-ddply(bibi_no_late_starts,.(get(scal)),mutate, mk.tau=kendallTrendTest( get(paste0(var))~ as.numeric(year))$estimate[1]) #What is the strength of the trend?
+  bibi_no_late_starts<-ddply(bibi_no_late_starts,.(get(scal)),mutate, mk.Sen=kendallTrendTest( get(paste0(var))~ as.numeric(year))$estimate[2]) #what is the slope (points per year)
+  bibi_no_late_starts<-ddply(bibi_no_late_starts,.(get(scal)),mutate, mk.pval=kendallTrendTest( get(paste0(var))~ as.numeric(year))$p.value) #how significant is the pvalue for mannkendall?
+  bibi_no_late_starts<-ddply(bibi_no_late_starts,.(get(scal)),mutate, mk.inter=kendallTrendTest( get(paste0(var))~ as.numeric(year))$estimate[3]) #This is B0 or the intercept
+  bibi_no_late_starts$MKtrend <- ifelse(bibi_no_late_starts$mk.pval < 0.05 & bibi_no_late_starts$mk.tau < 0, "negative", ifelse(bibi_no_late_starts$mk.pval < 0.05 & bibi_no_late_starts$mk.tau > 0, "positive", "none")) #this is an inpterpretation of the pvalue and tau (if it is less that .05, what direction is the trend.)
+  colnames(bibi_no_late_starts)[ncol(bibi_no_late_starts)-7]<-paste0("slope_",var)
+  colnames(bibi_no_late_starts)[ncol(bibi_no_late_starts)-6]<-paste0("LRpval_", var)
+  colnames(bibi_no_late_starts)[ncol(bibi_no_late_starts)-5]<-paste0("LRtrend_", var)
+  colnames(bibi_no_late_starts)[ncol(bibi_no_late_starts)-4]<-paste0("MKtau_", var)
+  colnames(bibi_no_late_starts)[ncol(bibi_no_late_starts)-3]<-paste0("MKSlope_", var)
+  colnames(bibi_no_late_starts)[ncol(bibi_no_late_starts)-2]<-paste0("MKpval_", var)
+  colnames(bibi_no_late_starts)[ncol(bibi_no_late_starts)-1]<-paste0("MKinter_", var)
+  colnames(bibi_no_late_starts)[ncol(bibi_no_late_starts)]<-paste0("MKtrend_", var)
+}
+
+#This is a creative way of showing both the duration of the data and the overall slope.
+sampletimes<- ggplot(bibi_no_late_starts, 
+                     aes(x=site_code, y=year, fill= MKSlope_overall_score))+
+  geom_tile()+
+  scale_fill_gradient2(name="Sen-Theil Slope")+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        panel.background = element_rect(fill = "darkgray",
+                                        colour = "darkgray"),
+        panel.border = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+sampletimes
+# ggsave("sampletimes.png", plot=sampletimes, width=20, height=10)
+
+names(bibi_no_late_starts)
+
+##This step gets one trend per site.
+overall_trends <- bibi_no_late_starts |> 
+  select(site_code, subbasin, timerange:(ncol(bibi_no_late_starts))) |> 
+  unique()
+
+# overall_trends<-unique(subset(overall_trends, select=c("Site.Code" , "Subbasin", "Stream.or.River", str_subset(colnames(overall_trends), "MKtau"), str_subset(colnames(overall_trends), "MKpval"),str_subset(colnames(overall_trends), "MKtrend"))))
+write.csv(overall_trends, paste0(output_folder,"/Site_Trends_coarse_PSSB_no_late_starts.csv"))
+
+bibi_sum_site<-ddply(bibi_no_late_starts, "site_code", summarise, mean_Overall.Score=mean(overall_score), SD_overallscore=sd(overall_score), SE_overallscore=sd(overall_score)/sqrt(length(overall_score)), len=length(overall_score), MK_trend=unique(MKtrend_overall_score), Avg_MKSlope_Overall.Score=mean(MKSlope_overall_score), Avg_MKtau_Overall.Score=mean(MKtau_overall_score), Avg_MKpval_Overall.Score=mean(MKpval_overall_score), sites=length(unique(site_code)), min=min(overall_score), max=max(overall_score), med=median(overall_score))
+write.csv(bibi_sum_site,paste0(output_folder,"/score_RKTtrend_summarized_by_site_PSSB_no_late_starts.csv"))
+
+sum(bibi_sum_site$len)
+
 ############  PLOTTING
 
 ############  Plot all positive and negative trends for overall and individual B-IBI scores
@@ -288,7 +345,7 @@ sum(bibi_sum_site$len)
 # }
 
 
-## Here it appears beth is trying to make a plot for each site, where the shape indicates the significance of the trend, the line is the trend, and the collors indicate general stream health. For some reason the shape of the points is not working.
+## Here it appears beth is trying to make a plot for each site, where the shape indicates the significance of the trend, the line is the trend, and the colors indicate general stream health. For some reason the shape of the points is not working.
 library(RColorBrewer)
 
 # for (var in colnames(bibi[str_subset(colnames(bibi), "trend")])) {
@@ -315,7 +372,7 @@ pp<-pp+geom_abline(aes(intercept=get(paste0("MKinter_",str_split(var, "_", n=2)[
 # }
 pp
 # }
-ggsave(paste0(output_folder,"/OverallScores_Sites_PSSB.png"), plot = pp, width=20, height=10)
+ggsave(paste0(output_folder,"/OverallScores_Sites_PSSB_plots_by_basin.png"), plot = pp, width=20, height=10)
 
 
 ggplot(bibi_small, aes(x=year_num, y=overall_score))+  geom_rect(xmin=2001, xmax=2026, ymin=0, ymax=20, fill="firebrick1", color="black")+
@@ -329,7 +386,7 @@ ggplot(bibi_small, aes(x=year_num, y=overall_score))+  geom_rect(xmin=2001, xmax
   facet_wrap(~site_code)+geom_point( aes(shape = c(shapes))) + scale_shape_identity()+labs(y="Overall B-IBI Score")
 
 
-ggsave(paste0(output_folder,"/SiteScores_PSSB.png"), width=20, height=10)
+ggsave(paste0(output_folder,"/SiteScores_PSSB_plots_by_site.png"), width=20, height=10)
 
 bibi_small %>%
   select(site_code, 
