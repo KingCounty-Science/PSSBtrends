@@ -62,7 +62,7 @@ dups<-bibi_cleaning[duplicated(bibi_cleaning[,c("project" , "wria_number"  , "ba
 names(bibi_cleaning)
 
 #bibi_means has site year metrics
-bibi_means <- aggregate(cbind(overall_score, taxa_richness_score, ephemeroptera_richness_score, plecoptera_richness_score, trichoptera_richness_score, clinger_richness_score, long_lived_richness_score, intolerant_richness_score, percent_dominant_score,  predator_percent_score, tolerant_percent_score) ~   site_code + subbasin + wria_number + year + number_of_organisms, data = bibi_cleaning, FUN = "mean", na.action = na.exclude)
+bibi_means <- aggregate(cbind(overall_score, taxa_richness_score, ephemeroptera_richness_score, plecoptera_richness_score, trichoptera_richness_score, clinger_richness_score, long_lived_richness_score, intolerant_richness_score, percent_dominant_score,  predator_percent_score, tolerant_percent_score, ephemeroptera_richness_quantity, plecoptera_richness_quantity, trichoptera_richness_quantity, ept_richness_quantity) ~   site_code + subbasin + wria_number + year + number_of_organisms, data = bibi_cleaning, FUN = "mean", na.action = na.exclude)
 
 #Get year information associated with bibi_means
 
@@ -193,8 +193,9 @@ plot_all_sites_trends_50 <-ggplot(bibi_no_late_starts)+
   geom_rect(xmin=2001, xmax=2026, ymin=40, ymax=60, fill="lightgoldenrod", color="black")+
   geom_rect(xmin=2001, xmax=2026, ymin=60, ymax=80, fill="lightgreen", color="black")+
   geom_rect(xmin=2001, xmax=2026, ymin=80, ymax=100, fill="steelblue1", color="black")+
-  geom_boxplot(aes(y=overall_score, x=as.numeric(paste0(year)), group=as.factor(year)), fill="white")+
-  geom_point(data=meanscores_sites_fewer, mapping=aes(x=as.numeric(paste0(year)), y=meanScore))+
+  #geom_boxplot(aes(y=overall_score, x=as.numeric(paste0(year)), group=as.factor(year)), fill="white")+
+  geom_violin(aes(y=overall_score, x=as.numeric(paste0(year)), group=as.factor(year)), fill="white")+
+  #geom_point(data=meanscores_sites_fewer, mapping=aes(x=as.numeric(paste0(year)), y=meanScore))+
   #geom_smooth(data=meanscores_sites_fewer, mapping=aes(x=as.numeric(paste0(year)), y=meanScore), method="lm",se=F)+
   labs(y="BIBI Score", x="Year")+ 
   scale_y_continuous(breaks = c(0, 20, 40, 60, 80, 100))+
@@ -202,7 +203,7 @@ plot_all_sites_trends_50 <-ggplot(bibi_no_late_starts)+
   theme(text = element_text(size = 50))+
   geom_quantile(data=bibi_no_late_starts, mapping=aes(x=as.numeric(paste0(year)), y=overall_score), quantiles=.5, color="blue", linewidth = 1.5)
 plot_all_sites_trends_50
-ggsave(paste0(output_folder,"/all_sites_trends_w_50th_quantile_line.png"), plot = plot_all_sites_trends_50, width = 20, height = 15, units="in")
+ggsave(paste0(output_folder,"/all_sites_trends_w_50th_quantile_line_violin.png"), plot = plot_all_sites_trends_50, width = 20, height = 15, units="in")
 
 
 plot_plecop_score_trends_50 <-ggplot(bibi_no_late_starts)+
@@ -219,6 +220,17 @@ plot_plecop_score_trends_50 <-ggplot(bibi_no_late_starts)+
 plot_plecop_score_trends_50
 ggsave(paste0(output_folder,"/all_sites_plecop_score_trend.png"), plot = plot_plecop_score_trends_50, width = 20, height = 15, units="in")
 
+plot_plecop_rich_trends_50 <-ggplot(bibi_no_late_starts)+
+  geom_violin(aes(y=plecoptera_richness_quantity, x=as.numeric(paste0(year)), group=as.factor(year)), fill="blue", alpha = 0.4)+
+  geom_smooth(data=bibi_no_late_starts, mapping=aes(x=as.numeric(paste0(year)), y=plecoptera_richness_quantity), method="lm",se=T)+
+  labs(y="Plecoptera richness", x="Year")+ 
+  #scale_y_continuous(breaks = c(0, 2, 4, 6, 8, 10, 12, 14))
+  theme_classic()+
+  theme(text = element_text(size = 50))
+plot_plecop_rich_trends_50
+ggsave(paste0(output_folder,"/all_sites_plecop_richness_trend.png"), plot = plot_plecop_rich_trends_50, width = 20, height = 15, units="in")
+
+
 plot_mayfly_score_trends_50 <-ggplot(bibi_no_late_starts)+
   geom_rect(xmin=2001, xmax=2026, ymin=0, ymax=2, fill="firebrick1", color="black")+
   geom_rect(xmin=2001, xmax=2026, ymin=2, ymax=4, fill="tan1", color="black")+
@@ -232,6 +244,35 @@ plot_mayfly_score_trends_50 <-ggplot(bibi_no_late_starts)+
   theme(text = element_text(size = 50))
 plot_mayfly_score_trends_50
 ggsave(paste0(output_folder,"/all_sites_ephemeroptera_score_trend.png"), plot = plot_mayfly_score_trends_50, width = 20, height = 15, units="in")
+
+plot_ephem_rich_trends_50 <-ggplot(bibi_no_late_starts)+
+  geom_violin(aes(y=ephemeroptera_richness_quantity, x=as.numeric(paste0(year)), group=as.factor(year)), fill="grey", alpha = 0.5)+
+  geom_smooth(data=bibi_no_late_starts, mapping=aes(x=as.numeric(paste0(year)), y=ephemeroptera_richness_quantity), method="lm",se=T)+
+  labs(y="Ephemeroptera richness", x="Year")+ 
+  theme_classic()+
+  theme(text = element_text(size = 50))
+plot_ephem_rich_trends_50
+ggsave(paste0(output_folder,"/all_sites_ephemeroptera_richness_trend.png"), plot = plot_ephem_rich_trends_50, width = 20, height = 15, units="in")
+
+plot_ept_rich_trends_50 <-ggplot(bibi_no_late_starts)+
+  geom_violin(aes(y=ept_richness_quantity, x=as.numeric(paste0(year)), group=as.factor(year)), fill="pink", alpha = 0.8)+
+  geom_smooth(data=bibi_no_late_starts, mapping=aes(x=as.numeric(paste0(year)), y=ept_richness_quantity), method="lm",se=T)+
+  labs(y="EPT richness", x="Year")+ 
+  theme_classic()+
+  theme(text = element_text(size = 50))
+plot_ept_rich_trends_50
+ggsave(paste0(output_folder,"/all_sites_ept_richness_trend.png"), plot = plot_ept_rich_trends_50, width = 20, height = 15, units="in")
+
+plot_overall_50 <-ggplot(bibi_no_late_starts)+
+  geom_violin(aes(y=overall_score, x=as.numeric(paste0(year)), group=as.factor(year)), fill="black", alpha = 0.8)+
+  geom_smooth(data=bibi_no_late_starts, mapping=aes(x=as.numeric(paste0(year)), y=overall_score), method="lm",se=T)+
+  labs(y="BIBI Score", x="Year")+ 
+  theme_classic()+
+  scale_y_continuous(breaks = c(0, 20, 40, 60, 80, 100))+
+  theme(text = element_text(size = 50))
+plot_overall_50
+ggsave(paste0(output_folder,"/all_sites_overall_trend_violin.png"), plot = plot_overall_50, width = 20, height = 15, units="in")
+
 
 ####
 scal<-"site_code" # "Site.Code" or "Subbasin"
