@@ -140,6 +140,7 @@ ggplot(bibi_no_late_starts, aes(x=year, y=overall_score))+geom_smooth(se=F)+them
 
 
 write.csv(bibi_no_late_starts, paste0(output_folder,"/BIBI_means_no_late_starts.csv"))
+
 library(ggpmisc)
 
 meanscores_sites<- bibi |> select(site_code, overall_score, year) |> 
@@ -223,6 +224,7 @@ ggsave(paste0(output_folder,"/all_sites_plecop_score_trend.png"), plot = plot_pl
 plot_plecop_rich_trends_50 <-ggplot(bibi_no_late_starts)+
   geom_violin(aes(y=plecoptera_richness_quantity, x=as.numeric(paste0(year)), group=as.factor(year)), fill="blue", alpha = 0.4)+
   geom_smooth(data=bibi_no_late_starts, mapping=aes(x=as.numeric(paste0(year)), y=plecoptera_richness_quantity), method="lm",se=T)+
+  geom_quantile()
   labs(y="Plecoptera richness", x="Year")+ 
   #scale_y_continuous(breaks = c(0, 2, 4, 6, 8, 10, 12, 14))
   theme_classic()+
