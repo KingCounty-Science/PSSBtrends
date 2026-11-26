@@ -54,14 +54,14 @@ bibi_cleaning$sampnum <- paste(bibi_cleaning$site_code, format(as.Date(bibi_clea
 
 bibi_cleaning <- bibi_cleaning |> 
   filter(month %in% c('07', '08', '09', '10')) |> #only keep samples collected in sample window
-  filter_out(number_of_organisms <450) # removes samples with fewer than 450 organisms
+  filter_out(number_of_organisms <400) # removes samples with fewer than 400 organisms - review this. It was 450 orgs, but PSSB is doing some weird things in giving 449 orgs in sample when we ask for 450 - see 09DUW0091 2002 sample
 
 #This only gives us the 2nd and above observation, we don't subset the initial instance of a sitecode & year.
 dups<-bibi_cleaning[duplicated(bibi_cleaning[,c("project" , "wria_number"  , "basin" , "subbasin" , "site_code", "year")]),]
 
 names(bibi_cleaning)
 
-#bibi_means has site year metrics
+#bibi_means has site year metrics; this takes the average of metrics (including scores) if there is more than one sample per year per site
 bibi_means <- aggregate(cbind(overall_score, taxa_richness_score, ephemeroptera_richness_score, plecoptera_richness_score, trichoptera_richness_score, clinger_richness_score, long_lived_richness_score, intolerant_richness_score, percent_dominant_score,  predator_percent_score, tolerant_percent_score, ephemeroptera_richness_quantity, plecoptera_richness_quantity, trichoptera_richness_quantity, ept_richness_quantity) ~   site_code + subbasin + wria_number + year + number_of_organisms, data = bibi_cleaning, FUN = "mean", na.action = na.exclude)
 
 #Get year information associated with bibi_means
@@ -73,23 +73,25 @@ bibi_years<-bibi_means |> #the new table will be
                    max_years = as.numeric(max(year)), #record the maximum year (turn to numeric), then
                    duration = max_years - min_years) #determine the duration of years
 
-bibi_means_years_10 <- left_join(bibi_means, bibi_years, by = "site_code") |> #keep all rows of bibi_means, and add the info from bibi_years)
+#keep all rows of bibi_means, and add the info from bibi_years, and filters out sites with less than 10 years of data
+bibi_means_years_10 <- left_join(bibi_means, bibi_years, by = "site_code") |> 
   filter(n_years > 9)
 
+write.csv(bibi_means, paste0(output_folder,"/BIBI_means.csv")) #this is whole data set
+write.csv(bibi_means_years_10, paste0(output_folder,"/bibi_means_w_at_least_10yrs.csv")) #this is data set with sites that have at least 10 years of data
+
+#plot of "min_years" to see the starting year of record for each site; this allows us to see that some sites are started late in record (WRIA 7 and BOise largely)
 ggplot(bibi_years, aes(x = min_years))+
   geom_histogram(binwidth = 1)
 
 #create a vector with the sites that had collection begin in 2014 or after
 later_starts<-bibi_years |> filter(min_years >= 2014) |> select(site_code) |> unique() |> pull()
 
-write.csv(bibi_means, paste0(output_folder,"/BIBI_means.csv"))
-write.csv(bibi_means_years_10, paste0(output_folder,"/bibi_means_w_at_least_10yrs.csv"))
-
 
 #####Site trends ####
 library(EnvStats)
 
-#get the full dataset; don't use this dataset for overall trends as this still includes sites in WRIA 7 and Boise that were started later
+####Use the data set "bibi_means" ONLY for site level trends and ONLY if you want all sites; don't use this dataset for overall trends as this still includes sites in WRIA 7 and Boise that were started later
 bibi <- bibi_means |> 
   filter_out(year == 2026) #drop incomplete 2026 data
 
@@ -108,7 +110,7 @@ bibi <-
   dplyr::mutate(timerange = max(year_num) - min(year_num)) %>% # add on range of record col
   ungroup()
 
-#get the no late starts dataset
+#####Use this code to generate the "no late starts" data set for looking at 125 sites that were started at are near 2002
 bibi_no_late_starts <- bibi_means |> 
   filter_out((year==2026)) |> 
   filter_out(site_code %in% later_starts) |> 
@@ -116,13 +118,12 @@ bibi_no_late_starts <- bibi_means |>
   dplyr::mutate(por = n_distinct(year)) %>% # add on period of record col
   ungroup() |> 
   filter(por > 9)
-bibi_no_late_starts<-bibi_no_late_starts %>%
+bibi_no_late_starts<-bibi_no_late_starts %>%  ### are these next 4 lines redundant with the previous few lines? are these needed?
   dplyr::group_by(site_code) %>%
   dplyr::mutate(por = n_distinct(year)) %>% # add on period of record col
   ungroup()
 
 unique(bibi_no_late_starts$site_code)
-bibi_no_late_starts <- bibi_no_late_starts |> filter(por > 9) # look only at sites with >9 years of data
 
 bibi_no_late_starts$year_num <- as.numeric(bibi_no_late_starts$year) #add a year column as numeric
 bibi_no_late_starts <- 
@@ -137,7 +138,6 @@ ggplot(bibi_no_late_starts, aes(x=site_code, y=year))+geom_tile()
 
 ggplot(bibi_no_late_starts, aes(x=year, y=overall_score))+geom_smooth(se=F)+theme(legend.position = "none")+
   geom_point()
-
 
 write.csv(bibi_no_late_starts, paste0(output_folder,"/BIBI_means_no_late_starts.csv"))
 
@@ -161,7 +161,7 @@ meanscores_sites_fewer<- bibi_no_late_starts |> select(site_code, overall_score,
                    max = max(overall_score),
                    median = median(overall_score))
 
-#plot for trends across years of all sites, based on the appropriate number of sites (e.g., those that have a long duration of data, started in 2002-2013, only including samples with at least 450 orgs)
+#plot for trends across years of all sites, based on the appropriate number of sites (e.g., those that have a long duration of data, started in 2002-2013, only including samples with at least 400 orgs[see note above])
 #just the mean scores
 ggplot(meanscores_sites_fewer, aes(x=year, y=meanScore))+geom_smooth(method="lm",se=F)+theme(legend.position = "none")+
   geom_point()+ylim(c(0,100))+labs(y="BIBI Score")+
@@ -187,7 +187,7 @@ plot_all_sites_trends <-ggplot(bibi_no_late_starts)+
 plot_all_sites_trends
 ggsave(paste0(output_folder,"/all_sites_trends_w_10th_50th_90th_quantiles.png"), plot = plot_all_sites_trends, width = 20, height = 15, units="in")
 
-#scores and trend with background and with 10th, 50th, and 90th quantiles
+#scores and trend with background and with 50th  quantiles
 plot_all_sites_trends_50 <-ggplot(bibi_no_late_starts)+
   geom_rect(xmin=2001, xmax=2026, ymin=0, ymax=20, fill="firebrick1", color="black")+
   geom_rect(xmin=2001, xmax=2026, ymin=20, ymax=40, fill="tan1", color="black")+
@@ -206,7 +206,25 @@ plot_all_sites_trends_50 <-ggplot(bibi_no_late_starts)+
 plot_all_sites_trends_50
 ggsave(paste0(output_folder,"/all_sites_trends_w_50th_quantile_line_violin.png"), plot = plot_all_sites_trends_50, width = 20, height = 15, units="in")
 
+#scores and trend with background and with 10th, 50th and 90th quantiles; violin plot
+plot_all_sites_trends_10_50_90 <-ggplot(bibi_no_late_starts)+
+  geom_rect(xmin=2001, xmax=2026, ymin=0, ymax=20, fill="firebrick1", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=20, ymax=40, fill="tan1", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=40, ymax=60, fill="lightgoldenrod", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=60, ymax=80, fill="lightgreen", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=80, ymax=100, fill="steelblue1", color="black")+
+  geom_violin(aes(y=overall_score, x=as.numeric(paste0(year)), group=as.factor(year)), fill="white")+
+  labs(y="BIBI Score", x="Year")+ 
+  scale_y_continuous(breaks = c(0, 20, 40, 60, 80, 100))+
+  theme_classic()+
+  theme(text = element_text(size = 50))+
+  geom_quantile(data=bibi_no_late_starts, mapping=aes(x=as.numeric(paste0(year)), y=overall_score), quantiles=.5, color="blue", linewidth = 1.5)+ 
+  geom_quantile(data=bibi_no_late_starts, mapping=aes(x=as.numeric(paste0(year)), y=overall_score), quantiles=.9, color="darkgreen", linewidth = 1.5) +
+  geom_quantile(data=bibi_no_late_starts, mapping=aes(x=as.numeric(paste0(year)), y=overall_score), quantiles=.1, color="white", linewidth = 1.5) #+
+plot_all_sites_trends_10_50_90
+ggsave(paste0(output_folder,"/all_sites_trends_w_10_50_90th_quantile_lines_violin.png"), plot = plot_all_sites_trends_10_50_90, width = 20, height = 15, units="in")
 
+#stonefly score box plot
 plot_plecop_score_trends_50 <-ggplot(bibi_no_late_starts)+
   geom_rect(xmin=2001, xmax=2026, ymin=0, ymax=2, fill="firebrick1", color="black")+
   geom_rect(xmin=2001, xmax=2026, ymin=2, ymax=4, fill="tan1", color="black")+
@@ -219,20 +237,31 @@ plot_plecop_score_trends_50 <-ggplot(bibi_no_late_starts)+
   theme_classic()+
   theme(text = element_text(size = 50))
 plot_plecop_score_trends_50
-ggsave(paste0(output_folder,"/all_sites_plecop_score_trend.png"), plot = plot_plecop_score_trends_50, width = 20, height = 15, units="in")
+ggsave(paste0(output_folder,"/all_sites_plecop_score_trend_box.png"), plot = plot_plecop_score_trends_50, width = 20, height = 15, units="in")
 
+# stonelfy score violin
+plot_plecop_score_trends_50 <-ggplot(bibi_no_late_starts)+
+  geom_violin(aes(y=plecoptera_richness_score, x=as.numeric(paste0(year)), group=as.factor(year)), fill="blue", alpha = 0.4)+
+  geom_smooth(data=bibi_no_late_starts, mapping=aes(x=as.numeric(paste0(year)), y=plecoptera_richness_score), method="lm",se=T)+
+  labs(y="Plecoptera richness score", x="Year")+ 
+  #scale_y_continuous(breaks = c(0, 2, 4, 6, 8, 10, 12, 14))
+  theme_classic()+
+  theme(text = element_text(size = 50))
+plot_plecop_score_trends_50
+ggsave(paste0(output_folder,"/all_sites_plecop_score_trend_violin.png"), plot = plot_plecop_score_trends_50, width = 20, height = 15, units="in")
+
+#stonefly richness violin plot
 plot_plecop_rich_trends_50 <-ggplot(bibi_no_late_starts)+
   geom_violin(aes(y=plecoptera_richness_quantity, x=as.numeric(paste0(year)), group=as.factor(year)), fill="blue", alpha = 0.4)+
   geom_smooth(data=bibi_no_late_starts, mapping=aes(x=as.numeric(paste0(year)), y=plecoptera_richness_quantity), method="lm",se=T)+
-  geom_quantile()
   labs(y="Plecoptera richness", x="Year")+ 
   #scale_y_continuous(breaks = c(0, 2, 4, 6, 8, 10, 12, 14))
   theme_classic()+
   theme(text = element_text(size = 50))
 plot_plecop_rich_trends_50
-ggsave(paste0(output_folder,"/all_sites_plecop_richness_trend.png"), plot = plot_plecop_rich_trends_50, width = 20, height = 15, units="in")
+ggsave(paste0(output_folder,"/all_sites_plecop_richness_trend_violin.png"), plot = plot_plecop_rich_trends_50, width = 20, height = 15, units="in")
 
-
+#mayfly score box plot
 plot_mayfly_score_trends_50 <-ggplot(bibi_no_late_starts)+
   geom_rect(xmin=2001, xmax=2026, ymin=0, ymax=2, fill="firebrick1", color="black")+
   geom_rect(xmin=2001, xmax=2026, ymin=2, ymax=4, fill="tan1", color="black")+
@@ -247,6 +276,17 @@ plot_mayfly_score_trends_50 <-ggplot(bibi_no_late_starts)+
 plot_mayfly_score_trends_50
 ggsave(paste0(output_folder,"/all_sites_ephemeroptera_score_trend.png"), plot = plot_mayfly_score_trends_50, width = 20, height = 15, units="in")
 
+# mayfly score violin plots
+plot_ephem_score_trends_50 <-ggplot(bibi_no_late_starts)+
+  geom_violin(aes(y=ephemeroptera_richness_score, x=as.numeric(paste0(year)), group=as.factor(year)), fill="grey", alpha = 0.5)+
+  geom_smooth(data=bibi_no_late_starts, mapping=aes(x=as.numeric(paste0(year)), y=ephemeroptera_richness_score), method="lm",se=T)+
+  labs(y="Ephemeroptera richness score", x="Year")+ 
+  theme_classic()+
+  theme(text = element_text(size = 50))
+plot_ephem_score_trends_50
+ggsave(paste0(output_folder,"/all_sites_ephemeroptera_score_trend_violin.png"), plot = plot_ephem_score_trends_50, width = 20, height = 15, units="in")
+
+# mayfly richness violin plots
 plot_ephem_rich_trends_50 <-ggplot(bibi_no_late_starts)+
   geom_violin(aes(y=ephemeroptera_richness_quantity, x=as.numeric(paste0(year)), group=as.factor(year)), fill="grey", alpha = 0.5)+
   geom_smooth(data=bibi_no_late_starts, mapping=aes(x=as.numeric(paste0(year)), y=ephemeroptera_richness_quantity), method="lm",se=T)+
@@ -254,8 +294,9 @@ plot_ephem_rich_trends_50 <-ggplot(bibi_no_late_starts)+
   theme_classic()+
   theme(text = element_text(size = 50))
 plot_ephem_rich_trends_50
-ggsave(paste0(output_folder,"/all_sites_ephemeroptera_richness_trend.png"), plot = plot_ephem_rich_trends_50, width = 20, height = 15, units="in")
+ggsave(paste0(output_folder,"/all_sites_ephemeroptera_richness_trend_violin.png"), plot = plot_ephem_rich_trends_50, width = 20, height = 15, units="in")
 
+#EPT richness violin plot
 plot_ept_rich_trends_50 <-ggplot(bibi_no_late_starts)+
   geom_violin(aes(y=ept_richness_quantity, x=as.numeric(paste0(year)), group=as.factor(year)), fill="pink", alpha = 0.8)+
   geom_smooth(data=bibi_no_late_starts, mapping=aes(x=as.numeric(paste0(year)), y=ept_richness_quantity), method="lm",se=T)+
@@ -265,6 +306,7 @@ plot_ept_rich_trends_50 <-ggplot(bibi_no_late_starts)+
 plot_ept_rich_trends_50
 ggsave(paste0(output_folder,"/all_sites_ept_richness_trend.png"), plot = plot_ept_rich_trends_50, width = 20, height = 15, units="in")
 
+# overall scores, violin plots without score category colors
 plot_overall_50 <-ggplot(bibi_no_late_starts)+
   geom_violin(aes(y=overall_score, x=as.numeric(paste0(year)), group=as.factor(year)), fill="black", alpha = 0.8)+
   geom_smooth(data=bibi_no_late_starts, mapping=aes(x=as.numeric(paste0(year)), y=overall_score), method="lm",se=T)+
@@ -403,7 +445,7 @@ overall_trends <- bibi_no_late_starts |>
 write.csv(overall_trends, paste0(output_folder,"/Site_Trends_coarse_PSSB_no_late_starts.csv"))
 
 bibi_sum_site<-ddply(bibi_no_late_starts, "site_code", summarise, mean_Overall.Score=mean(overall_score), SD_overallscore=sd(overall_score), SE_overallscore=sd(overall_score)/sqrt(length(overall_score)), len=length(overall_score), MK_trend=unique(MKtrend_overall_score), Avg_MKSlope_Overall.Score=mean(MKSlope_overall_score), Avg_MKtau_Overall.Score=mean(MKtau_overall_score), Avg_MKpval_Overall.Score=mean(MKpval_overall_score), sites=length(unique(site_code)), min=min(overall_score), max=max(overall_score), med=median(overall_score))
-write.csv(bibi_sum_site,paste0(output_folder,"/score_RKTtrend_summarized_by_site_PSSB_no_late_starts.csv"))
+write.csv(bibi_sum_site,paste0(output_folder,"/score_MKtrend_summarized_by_site_PSSB_no_late_starts.csv"))
 
 sum(bibi_sum_site$len)
 
@@ -443,7 +485,7 @@ library(RColorBrewer)
 # if(nrow(bibi[bibi[var]=='positive',])>=1) {
 var="MKtrend_overall_score"
 
-bibi_small <- bibi|> filter_out(site_code %in% later_starts)
+bibi_small <- bibi_no_late_starts|> filter_out(site_code %in% later_starts)
 
 bibi_small$pchOS<-as.factor(bibi_small$MKtrend_overall_score)
 shapes = c(6, 4, 2) 
@@ -466,7 +508,7 @@ pp
 ggsave(paste0(output_folder,"/OverallScores_Sites_PSSB_plots_by_basin.png"), plot = pp, width=20, height=10)
 
 
-ggplot(bibi_small, aes(x=year_num, y=overall_score))+  geom_rect(xmin=2001, xmax=2026, ymin=0, ymax=20, fill="firebrick1", color="black")+
+all_sites_facet<- ggplot(bibi_small, aes(x=year_num, y=overall_score))+  geom_rect(xmin=2001, xmax=2026, ymin=0, ymax=20, fill="firebrick1", color="black")+
   geom_rect(xmin=2001, xmax=2026, ymin=20, ymax=40, fill="tan1", color="black")+
   geom_rect(xmin=2001, xmax=2026, ymin=40, ymax=60, fill="lightgoldenrod", color="black")+
   geom_rect(xmin=2001, xmax=2026, ymin=60, ymax=80, fill="lightgreen", color="black")+
@@ -475,30 +517,127 @@ ggplot(bibi_small, aes(x=year_num, y=overall_score))+  geom_rect(xmin=2001, xmax
   geom_abline(aes(intercept=get(paste0("MKinter_",str_split(var, "_", n=2)[[1]][2])),slope=get(paste0("MKSlope_",str_split(var, "_", n=2)[[1]][2]))), color="blue", size=1)+
   theme(legend.position = "none")+
   facet_wrap(~site_code)+geom_point( aes(shape = c(shapes))) + scale_shape_identity()+labs(y="Overall B-IBI Score")
+all_sites_facet
+ggsave(paste0(output_folder,"/OverallScores_Sites_PSSB_plots_by_site.png"), plot = all_sites_facet, width=20, height=10)
 
-#for graph of Taylor Creek 08WES1340 [need to figure out how to loop this for all sites]
-site08WES1340 <- bibi_small |> 
-  filter(site_code == "08WES1340")
-plot_08WES1340<- ggplot(site08WES1340, aes(x=year_num, y=overall_score))+  geom_rect(xmin=2001, xmax=2026, ymin=0, ymax=20, fill="firebrick1", color="black")+
+#for graph of Duwamish trib - declining site
+site09DUW0091 <- bibi_small |> 
+  filter(site_code == "09DUW0091")
+
+plot_09DUW0091<- ggplot(site09DUW0091, aes(x=year_num, y=overall_score))+  
+  geom_rect(xmin=2001, xmax=2026, ymin=0, ymax=20, fill="firebrick1", color="black")+
   geom_rect(xmin=2001, xmax=2026, ymin=20, ymax=40, fill="tan1", color="black")+
   geom_rect(xmin=2001, xmax=2026, ymin=40, ymax=60, fill="lightgoldenrod", color="black")+
   geom_rect(xmin=2001, xmax=2026, ymin=60, ymax=80, fill="lightgreen", color="black")+
   geom_rect(xmin=2001, xmax=2026, ymin=80, ymax=100, fill="steelblue1", color="black")+
-  geom_point(data=site08WES1340, mapping=aes(x=as.numeric(paste0(year)), y=overall_score, size = 4))+
-  geom_smooth(se=F, method="lm")+ 
+  geom_point(aes(shape = MKtrend_overall_score, fill = MKtrend_overall_score), size  = 5) +
+  scale_shape_manual(values=c(21,24,25), breaks=c("none","positive", "negative"), labels=c("non-significant", "increasing", "decreasing"))+
+  scale_fill_manual(values=c("white", "gray", "black"),breaks=c("none","positive", "negative"), labels=c("non-significant", "increasing", "decreasing"))+
+  geom_smooth(method="lm", formula = y ~ x, se=F, color = "black" )+ 
   scale_y_continuous(breaks = c(0, 20, 40, 60, 80, 100))+
   labs(
     x ="Year",
     y = "BIBI Score") +
-  theme(text=element_text(size=25), legend.position = "none")
+  theme_bw()+
+  theme(
+    text=element_text(size=25), 
+    legend.position = "none",
+  )
+plot_09DUW0091
 ggsave(paste0(output_folder,"/08WES1340_trend.png"), plot = plot_08WES1340, width=20, height=10)
 
 
-bibi_cleaning <- bibi_cleaning |> 
-  filter(month %in% c('07', '08', '09', '10')) |> #only keep samples collected in sample window
-  filter_out(number_of_organisms <450) # removes samples with fewer than 450 organisms
+#for graph of Taylor Creek 08WES1340 [need to figure out how to loop this for all sites]
+
+site08WES1340 <- bibi_small |> 
+  filter(site_code == "08WES1340")
+
+plot_08WES1340<- ggplot(site08WES1340, aes(x=year_num, y=overall_score))+  
+  geom_rect(xmin=2001, xmax=2026, ymin=0, ymax=20, fill="firebrick1", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=20, ymax=40, fill="tan1", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=40, ymax=60, fill="lightgoldenrod", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=60, ymax=80, fill="lightgreen", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=80, ymax=100, fill="steelblue1", color="black")+
+  geom_point(aes(shape = MKtrend_overall_score, fill = MKtrend_overall_score), size  = 5) +
+  scale_shape_manual(values=c(21,24,25), breaks=c("none","positive", "negative"), labels=c("non-significant", "increasing", "decreasing"))+
+  scale_fill_manual(values=c("white", "gray", "black"),breaks=c("none","positive", "negative"), labels=c("non-significant", "increasing", "decreasing"))+
+  geom_smooth(method="lm", formula = y ~ x, se=F, color = "black" )+ 
+  scale_y_continuous(breaks = c(0, 20, 40, 60, 80, 100))+
+  labs(
+    x ="Year",
+    y = "BIBI Score") +
+  theme_bw()+
+  theme(
+    text=element_text(size=25), 
+    legend.position = "none",
+    )
+plot_08WES1340
+ggsave(paste0(output_folder,"/08WES1340_trend.png"), plot = plot_08WES1340, width=20, height=10)
 
 
+site08WES1490 <- bibi_small |> 
+  filter(site_code == "08WES1490")
+plot_08WES1490<- ggplot(site08WES1490, aes(x=year_num, y=overall_score))+  geom_rect(xmin=2001, xmax=2026, ymin=0, ymax=20, fill="firebrick1", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=20, ymax=40, fill="tan1", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=40, ymax=60, fill="lightgoldenrod", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=60, ymax=80, fill="lightgreen", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=80, ymax=100, fill="steelblue1", color="black")+
+  geom_point(aes(shape = MKtrend_overall_score, fill = MKtrend_overall_score), size  = 6) +
+  scale_shape_manual(values=c(21,24,25), breaks=c("none","positive", "negative"), labels=c("non-significant", "increasing", "decreasing"))+
+  scale_fill_manual(values=c("white", "gray", "black"),breaks=c("none","positive", "negative"), labels=c("non-significant", "increasing", "decreasing"))+
+  geom_smooth(method="lm", formula = y ~ x, se=F, color = "black" )+ 
+  scale_y_continuous(breaks = c(0, 20, 40, 60, 80, 100))+
+  labs(
+    x ="Year",
+    y = "BIBI Score") +
+  theme_bw()+
+  theme(
+    text=element_text(size=25), 
+    legend.position = "none")
+plot_08WES1490
+ggsave(paste0(output_folder,"/08WES1490_trend.png"), plot = plot_08WES1490, width=20, height=10)
+
+# Can't figure out how to plot two lines (by site) on one graph; trying to plot 08WES1340 and 08WES1490 together
+sites08WES_1340_1490 <- bibi_small |> 
+  filter(site_code %in% c("08WES1490", "08WES1340"))
+plot_08WES_1340_1490<-ggplot(sites08WES_1340_1490, aes(x=year_num, y=overall_score, color = site_code))+  
+  geom_rect(xmin=2001, xmax=2026, ymin=0, ymax=20, fill="firebrick1", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=20, ymax=40, fill="tan1", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=40, ymax=60, fill="lightgoldenrod", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=60, ymax=80, fill="lightgreen", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=80, ymax=100, fill="steelblue1", color="black")+
+  geom_point(aes(shape = MKtrend_overall_score, fill = MKtrend_overall_score), size  = 5) +
+  scale_shape_manual(values=c(21,24,25), breaks=c("none","positive", "negative"), labels=c("non-significant", "increasing", "decreasing"))+
+  scale_fill_manual(values=c("white", "darkgray", "black"),breaks=c("none","positive", "negative"), labels=c("non-significant", "increasing", "decreasing"))+
+  geom_smooth(method="lm", formula = y ~ x, se=F, color = "black")+ 
+  scale_y_continuous(breaks = c(0, 20, 40, 60, 80, 100))+
+  labs(
+    x ="Year",
+    y = "BIBI Score") +
+  theme(text=element_text(size=25)) #removed "legend.position = "none"
+plot_08WES_1340_1490
+
+
+## code for from FWS paper - pasted here just as an example for testing/borrowing code
+imp_change_02_25 <-ggplot(imp_change, aes(x=change_2002_2025, y=avg_mk_slope_overall_score))+
+  geom_point(aes(shape=mk_trend,  fill=mk_trend)) +
+  stat_smooth(method = "lm", formula = y ~ x, color="black")+
+  stat_poly_eq(formula = y ~ x, rr.digits = 2, coef.digits = 3,label.x=5, label.y=-1, position="identity", color = "black", aes(label = paste(..eq.label.., ..adj.rr.label.., sep = "*\", \"*")), parse = TRUE)+
+  scale_shape_manual(values=c(21,24, 25), breaks=c("none","positive", "negative"), labels=c("non-significant", "increasing", "decreasing"))+
+  scale_fill_manual(values=c("white", "darkgray", "black"),breaks=c("none","positive", "negative"), labels=c("non-significant", "increasing", "decreasing"))+
+  geom_line(y=0, lty="dashed") +
+  theme_bw()+
+  theme(text=element_text(family="sans"), panel.border = element_blank(), panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"), axis.text=element_text(colour="black"))+
+  xlab("Change in % impervious cover") +
+  ylab("Slope estimate (BIBI trend)") +
+  labs(shape="Trend Direction", fill="Trend Direction")+
+  guides(fill = "none", shape="none") 
+imp_change_02_25
+
+
+
+# summary table of sites that were found to be trending using MK tests (negative, none, or positive); includes overall score and metrics 
 bibi_small %>%
   select(site_code, 
         MKtrend_overall_score, 
@@ -521,12 +660,7 @@ bibi_small %>%
   pivot_wider(names_from = trend, values_from = n )
 
 
-#How often is the regression slope vs the median slope different?
 
-
-ggplot(bibi, aes(x=min_y) +
-         geom_hist)
-       
 #CART analysis ####
 # Load the library
 library(rpart)
