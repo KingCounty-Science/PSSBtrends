@@ -54,7 +54,7 @@ bibi_cleaning$sampnum <- paste(bibi_cleaning$site_code, format(as.Date(bibi_clea
 
 bibi_cleaning <- bibi_cleaning |> 
   filter(month %in% c('07', '08', '09', '10')) |> #only keep samples collected in sample window
-  filter_out(number_of_organisms <400) # removes samples with fewer than 400 organisms - review this. It was 450 orgs, but PSSB is doing some weird things in giving 449 orgs in sample when we ask for 450 - see 09DUW0091 2002 sample
+  filter_out(number_of_organisms <430) # removes samples with fewer than 430 organisms - review this. It was 450 orgs, but PSSB is doing some weird things in giving 449 orgs in sample when we ask for 450 - see 09DUW0091 2002 sample
 
 #This only gives us the 2nd and above observation, we don't subset the initial instance of a sitecode & year.
 dups<-bibi_cleaning[duplicated(bibi_cleaning[,c("project" , "wria_number"  , "basin" , "subbasin" , "site_code", "year")]),]
@@ -542,17 +542,16 @@ plot_09DUW0091<- ggplot(site09DUW0091, aes(x=year_num, y=overall_score))+
   theme(
     text=element_text(size=25), 
     legend.position = "none",
+    plot.margin = margin(t=20, r=20, b=20, l=20, unit = "pt")
   )
 plot_09DUW0091
-ggsave(paste0(output_folder,"/08WES1340_trend.png"), plot = plot_08WES1340, width=20, height=10)
+ggsave(paste0(output_folder,"/09DUW0091_trend.png"), plot = plot_09DUW0091, width = 6, height = 4, units = "in", dpi = 300)
 
+#for graph of Cedar trib - improving site
+site08CED2898 <- bibi_small |> 
+  filter(site_code == "08CED2898")
 
-#for graph of Taylor Creek 08WES1340 [need to figure out how to loop this for all sites]
-
-site08WES1340 <- bibi_small |> 
-  filter(site_code == "08WES1340")
-
-plot_08WES1340<- ggplot(site08WES1340, aes(x=year_num, y=overall_score))+  
+plot_08CED2898<- ggplot(site08CED2898, aes(x=year_num, y=overall_score))+  
   geom_rect(xmin=2001, xmax=2026, ymin=0, ymax=20, fill="firebrick1", color="black")+
   geom_rect(xmin=2001, xmax=2026, ymin=20, ymax=40, fill="tan1", color="black")+
   geom_rect(xmin=2001, xmax=2026, ymin=40, ymax=60, fill="lightgoldenrod", color="black")+
@@ -570,9 +569,38 @@ plot_08WES1340<- ggplot(site08WES1340, aes(x=year_num, y=overall_score))+
   theme(
     text=element_text(size=25), 
     legend.position = "none",
-    )
+    plot.margin = margin(t=20, r=20, b=20, l=20, unit = "pt")
+  )
+plot_08CED2898
+ggsave(paste0(output_folder,"/08CED2898_trend.png"), plot = plot_08CED2898, width = 6, height = 4, units = "in", dpi = 300)
+
+
+#for graph of Taylor Creek 08WES1340 [need to figure out how to loop this for all sites]
+
+site08WES1340 <- bibi_small |> 
+  filter(site_code == "08WES1340")
+
+plot_08WES1340<- ggplot(site08WES1340, aes(x=year_num, y=overall_score))+  
+  geom_rect(xmin=2001, xmax=2026, ymin=0, ymax=20, fill="firebrick1", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=20, ymax=40, fill="tan1", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=40, ymax=60, fill="lightgoldenrod", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=60, ymax=80, fill="lightgreen", color="black")+
+  geom_rect(xmin=2001, xmax=2026, ymin=80, ymax=100, fill="steelblue1", color="black")+
+  geom_point(aes(shape = MKtrend_overall_score, fill = MKtrend_overall_score), size  = 5) +
+  scale_shape_manual(values=c(21,24,25), breaks=c("none","positive", "negative"), labels=c("non-significant", "increasing", "decreasing"))+
+  scale_fill_manual(values=c("white", "grey", "black"),breaks=c("none","positive", "negative"), labels=c("non-significant", "increasing", "decreasing"))+
+  geom_smooth(method="lm", formula = y ~ x, se=F, color = "black" )+ 
+  scale_y_continuous(breaks = c(0, 20, 40, 60, 80, 100))+
+  labs(
+    x ="Year",
+    y = "BIBI Score") +
+  theme_bw()+
+  theme(
+    text=element_text(size=25), 
+    legend.position = "none",
+    plot.margin = margin(t=20, r=20, b=20, l=20, unit = "pt"))
 plot_08WES1340
-ggsave(paste0(output_folder,"/08WES1340_trend.png"), plot = plot_08WES1340, width=20, height=10)
+ggsave(paste0(output_folder,"/08WES1340_trend.png"), plot = plot_08WES1340, width = 6, height = 4, units = "in", dpi = 300)
 
 
 site08WES1490 <- bibi_small |> 
@@ -596,26 +624,6 @@ plot_08WES1490<- ggplot(site08WES1490, aes(x=year_num, y=overall_score))+  geom_
     legend.position = "none")
 plot_08WES1490
 ggsave(paste0(output_folder,"/08WES1490_trend.png"), plot = plot_08WES1490, width=20, height=10)
-
-# Can't figure out how to plot two lines (by site) on one graph; trying to plot 08WES1340 and 08WES1490 together
-sites08WES_1340_1490 <- bibi_small |> 
-  filter(site_code %in% c("08WES1490", "08WES1340"))
-plot_08WES_1340_1490<-ggplot(sites08WES_1340_1490, aes(x=year_num, y=overall_score, color = site_code))+  
-  geom_rect(xmin=2001, xmax=2026, ymin=0, ymax=20, fill="firebrick1", color="black")+
-  geom_rect(xmin=2001, xmax=2026, ymin=20, ymax=40, fill="tan1", color="black")+
-  geom_rect(xmin=2001, xmax=2026, ymin=40, ymax=60, fill="lightgoldenrod", color="black")+
-  geom_rect(xmin=2001, xmax=2026, ymin=60, ymax=80, fill="lightgreen", color="black")+
-  geom_rect(xmin=2001, xmax=2026, ymin=80, ymax=100, fill="steelblue1", color="black")+
-  geom_point(aes(shape = MKtrend_overall_score, fill = MKtrend_overall_score), size  = 5) +
-  scale_shape_manual(values=c(21,24,25), breaks=c("none","positive", "negative"), labels=c("non-significant", "increasing", "decreasing"))+
-  scale_fill_manual(values=c("white", "darkgray", "black"),breaks=c("none","positive", "negative"), labels=c("non-significant", "increasing", "decreasing"))+
-  geom_smooth(method="lm", formula = y ~ x, se=F, color = "black")+ 
-  scale_y_continuous(breaks = c(0, 20, 40, 60, 80, 100))+
-  labs(
-    x ="Year",
-    y = "BIBI Score") +
-  theme(text=element_text(size=25)) #removed "legend.position = "none"
-plot_08WES_1340_1490
 
 
 ## code for from FWS paper - pasted here just as an example for testing/borrowing code
